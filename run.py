@@ -1,3 +1,4 @@
+import os
 from app import create_app
 from flask import render_template, send_from_directory
 from app.services.recommender import recommender_bp
@@ -11,4 +12,5 @@ def widget_js():
     return send_from_directory(".", "widget.js", mimetype="application/javascript")
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    port = int(os.environ.get("PORT", 5001))
+    app.run(debug=True, host="0.0.0.0", port=port)
