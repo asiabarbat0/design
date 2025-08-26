@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DesignStream AI</title>
+</head>
+<body>
+    <h1>Upload and Render</h1>
+    <form action="/render/render" method="post" enctype="multipart/form-data">
+        <label for="room">Room Image:</label><br>
+        <input type="file" id="room" name="room" accept="image/png, image/jpeg"><br><br>
+        <label for="cutouts">Cutout Images:</label><br>
+        <input type="file" id="cutouts" name="cutouts" accept="image/png, image/jpeg" multiple><br><br>
+        <label for="scale">Scale (0-1):</label><br>
+        <input type="number" id="scale" name="scale" min="0" max="1" step="0.1" value="0.8"><br><br>
+        <label for="anchor">Anchor:</label><br>
+        <select id="anchor" name="anchor">
+            <option value="center">Center</option>
+            <option value="topleft">Top Left</option>
+            <option value="topright">Top Right</option>
+            <option value="bottomleft">Bottom Left</option>
+            <option value="bottomright">Bottom Right</option>
+        </select><br><br>
+        <label for="fit">Fit (0-1):</label><br>
+        <input type="number" id="fit" name="fit" min="0" max="1" step="0.1" value="0.5"><br><br>
+        <label for="curtains">Curtains:</label>
+        <input type="checkbox" id="curtains" name="curtains" value="true"><br><br>
+        <label for="lights">Lights:</label>
+        <select id="lights" name="lights">
+            <option value="none">None</option>
+            <option value="soft">Soft</option>
+            <option value="bright">Bright</option>
+        </select><br><br>
+        <input type="submit" value="Render">
+    </form>
+    {% if render_url %}
+        <h2>Result</h2>
+        <img src="{{ render_url }}" alt="Render">
+    {% endif %}
+</body>
+</html>

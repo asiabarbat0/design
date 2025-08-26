@@ -1,0 +1,6 @@
+{
+  "python.analysis.extraPaths": ["./app"],
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python-envs.pythonProjects": []
+}
