@@ -9,7 +9,7 @@ app = create_app()
 
 @app.get("/widget.js")
 def widget_js():
-    return send_from_directory(".", "widget.js", mimetype="application/javascript")
+    return send_from_directory("app/static", "widget.js", mimetype="application/javascript")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
