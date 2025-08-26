@@ -1,3 +1,4 @@
+console.log("widget loaded");
 document.addEventListener('DOMContentLoaded', function() {
     const button = document.createElement('button');
     button.innerText = 'Design with my room';
