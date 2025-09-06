@@ -15,12 +15,14 @@ def create_app():
     # Move imports inside create_app() to avoid duplicate registrations
     from app.services.matting import bp as matting_bp
     from app.services.render import bp as render_bp
+    from app.services.recommender import recommender_bp
     # from app.services.replace import bp as replace_bp  # Comment out if replace.py is missing
     
     print(f"Registering matting_bp: {matting_bp}")
     app.register_blueprint(matting_bp)
     print(f"Registering render_bp: {render_bp}")
     app.register_blueprint(render_bp)
+    app.register_blueprint(recommender_bp)
     # app.register_blueprint(replace_bp)  # Comment out if replace.py is missing
     
     @app.route('/')
