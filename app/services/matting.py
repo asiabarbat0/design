@@ -4,6 +4,7 @@ from flask import Blueprint, request, abort, send_file, current_app
 import io
 from PIL import Image
 import requests
+import rembg
 from typing import Optional
 import numpy as np  # Already present
 
