@@ -11,6 +11,7 @@ app = create_app()
 
 @app.get("/widget.js")
 def widget_js():
+    print(f"Attemping to serve widget.js from {base_dir / 'app/static/widget.js'}")
     return send_from_directory("app/static", "widget.js", mimetype="application/javascript")
 
 if __name__ == "__main__":
