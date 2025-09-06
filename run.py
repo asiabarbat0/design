@@ -4,7 +4,9 @@ from flask import render_template, send_from_directory
 from app.services.recommender import recommender_bp
 from app.services.matting import bp as matting_bp
 from app.services.render import bp as render_bp
+from pathlib import Path
 
+base_dir = Path(__file__).resolve().parent
 app = create_app()
 
 @app.get("/widget.js")
