@@ -49,10 +49,10 @@ def _embed_image(url_or_path: str) -> np.ndarray:
             norm = torch.linalg.norm(feats, dim=-1, keepdim=True).clamp_min(EPS)
             vec = (feats / norm).detach().cpu().numpy().astype(np.float32).ravel()
             vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
-            if vec.shape[0] != 512:
-                raise ValueError(f"Expected 512 dims, got {vec.shape[0]}")
-            print(f"[recommender] Generated embedding for {url_or_path}, norm: {np.linalg.norm(vec):.4f}, first 5 values: {vec[:5]}, all zeros: {np.all(vec == 0)}")
-            return vec
+        if vec.shape[0] != 512:
+            raise ValueError(f"Expected 512 dims, got {vec.shape[0]}")
+        print(f"[recommender] Generated embedding for {url_or_path}, norm: {np.linalg.norm(vec):.4f}, first 5 values: {vec[:5]}, all zeros: {np.all(vec == 0)}")
+        return vec
     except Exception as e:
         print(f"[recommender] Embedding error for {url_or_path}: {e}")
         return np.zeros(512, dtype=np.float32)
@@ -90,13 +90,24 @@ def get_recommendations_route():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@recommender_bp.route('/matting/preview', methods=['GET'])
-def preview_matting():
-    image_url = request.args.get('image_url')
-    if not image_url:
-        return jsonify({'error': 'Missing image_url'}), 400
-    cutout_url = _create_cutout(image_url)
-    return jsonify({'image_url': image_url, 'cutout_url': cutout_url})
+@recommender_bp.route('/widget/recommendations', methods=['POST'])
+def get_recommendations_upload():
+    f = request.files.get('room_photo')
+    if not f or f.filename == '':
+        return jsonify({'error': 'Missing file: room_photo'}), 400
+    tmp_path = f"/tmp/{f.filename}"
+    f.save(tmp_path)
+    limit = int(request.form.get('limit', 20))
+    cursor = request.form.get('cursor')
+    try:
+        items, next_cursor = get_recommendations(tmp_path, {}, cursor, limit)
+        return jsonify({
+            'recommendations': items,
+            'next_cursor': next_cursor,
+            'room_photo_tmp': tmp_path
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @recommender_bp.route('/analytics/event', methods=['POST'])
 def track_event():
