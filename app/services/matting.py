@@ -7,21 +7,21 @@ import requests
 import rembg
 from typing import Optional
 import numpy as np
-from scipy import ndimage  # Added for zoom
+from scipy import ndimage
 
 bp = Blueprint("matting", __name__, url_prefix="/matting")
 
 # Model setup
 model_path = "yolov8x-seg.pt"
 if not os.path.exists(model_path):
-    model = YOLO("yolov8x-seg.pt")  # Download if not present
+    model = YOLO("yolov8x-seg.pt")
 else:
     model = YOLO(model_path)
 
 TIMEOUT = 20
 MAX_BYTES = 25 * 1024 * 1024  # 25MB
 MAX_SIDE = 2000
-SESSION = rembg.new_session()  # Default rembg session
+SESSION = rembg.new_session()
 
 def _fetch_image(url: str) -> bytes:
     headers = {"User-Agent": "designstream-matting/1.0", "Accept": "image/*"}
@@ -46,7 +46,7 @@ def _normalize_unsplash(url: str) -> str:
 @bp.get("/preview")
 def preview():
     url = request.args.get("image_url")
-    model_type = request.args.get("model", "rembg")  # Default to rembg, option for 'yolo'
+    model_type = request.args.get("model", "rembg")
     if not url:
         abort(400, "image_url is required")
     
@@ -65,11 +65,9 @@ def preview():
         if mask is not None:
             alpha = (mask * 255).astype(np.uint8)
             h, w = im.size
-            # Use ndimage.zoom for proper resizing
-            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1).astype(np.uint8)
-            # Ensure alpha_3d is (height, width, 1) for RGBA
+            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1, mode='constant').astype(np.uint8)
             alpha_3d = np.zeros((h, w, 1), dtype=np.uint8)
-            alpha_3d[:, :, 0] = np.clip(alpha_resized, 0, 255)  # Clip to valid range
+            alpha_3d[:, :, 0] = np.clip(alpha_resized, 0, 255)
             matted = Image.fromarray(np.dstack((np.array(im), alpha_3d[:, :, 0])))
         else:
             current_app.logger.warning("YOLO segmentation failed, falling back to rembg")
