@@ -59,17 +59,20 @@ def preview():
         im.thumbnail((MAX_SIDE, MAX_SIDE))
     
     if model_type.lower() == "yolo":
-        # Use YOLO for segmentation
         results = model(im)
         mask = results[0].masks.data[0].cpu().numpy() if results[0].masks else None
         if mask is not None:
             alpha = (mask * 255).astype(np.uint8)
-            matted = Image.fromarray(np.dstack((np.array(im), alpha)))
+            # Resize alpha to match im dimensions
+            alpha_resized = np.resize(alpha, im.size[::-1])  # (height, width)
+            # Create a single-channel alpha layer with proper shape
+            alpha_3d = np.zeros(im.size + (1,), dtype=np.uint8)  # Shape: (height, width, 1)
+            alpha_3d[:, :, 0] = alpha_resized
+            matted = Image.fromarray(np.dstack((np.array(im), alpha_3d[:, :, 0])))
         else:
             current_app.logger.warning("YOLO segmentation failed, falling back to rembg")
             matted = rembg.remove(im, session=SESSION, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
-    else:
-        # Use rembg (default or specified)
+    else:  # rembg or human model
         session = SESSION if model_type.lower() != "human" else rembg.new_session("isnet-general-human-seg")
         matted = rembg.remove(im, session=session, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
 
