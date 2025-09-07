@@ -3,21 +3,17 @@ import io
 import os
 from urllib.parse import urlparse
 from typing import List, Tuple
-
 import requests
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
-
 from flask import Blueprint, request, abort, send_file, current_app
 from werkzeug.utils import secure_filename
 
 bp = Blueprint("render", __name__, url_prefix="/render")
-
 TIMEOUT = 20
 MAX_BYTES = 25 * 1024 * 1024  # 25MB
 RENDER_OUT_MAX_W = int(os.getenv("RENDER_OUT_MAX_W", "1920"))  # final output width cap
 
 # ------------------ fetch / open helpers ------------------
-
 def _fetch_bytes(url: str) -> bytes:
     with requests.get(url, timeout=TIMEOUT, stream=True, headers={"User-Agent": "designstream-render/1.0"}) as r:
         r.raise_for_status()
@@ -60,7 +56,6 @@ def _basename_from_url(url: str) -> str:
     return secure_filename(name)
 
 # ------------------ compositing helpers ------------------
-
 def _paste_cropped(base: Image.Image, fg: Image.Image, x: int, y: int):
     bx, by = base.size
     fw, fh = fg.size
@@ -95,14 +90,13 @@ def _constrain_max_width(im: Image.Image, max_w: int) -> Image.Image:
     return im.resize((max_w, new_h), Image.LANCZOS)
 
 # ------------------ main route ------------------
-
-@bp.route("/", methods=["GET", "POST"])
+@bp.route("/", methods=["GET", "POST"], strict_slashes=False)
 def render_preview():
     """
-    GET  /render?room_url=...&cutouts=url1,url2&anchor=center&fit=0.5&shadow=1
-    POST /render  (multipart/form-data)
+    GET /render?room_url=...&cutouts=url1,url2&anchor=center&fit=0.5&shadow=1
+    POST /render (multipart/form-data)
          fields:
-           - room:    file
+           - room: file
            - cutouts: file (repeatable)
            - anchor, fit, shadow, opacity, etc. (optional)
     Returns image/png.
@@ -145,15 +139,14 @@ def render_preview():
         except Exception:
             abort(400, f"invalid int for {name}: {v!r}")
 
-    scale = _f("scale", 1.0)      # uniform scale for explicit width/height branch
-    fit = _f("fit", 0.5)          # fraction of room height
+    scale = _f("scale", 1.0)  # uniform scale for explicit width/height branch
+    fit = _f("fit", 0.5)  # fraction of room height
     opacity = _f("opacity", 1.0)  # 0..1
     shadow_on = (request.values.get("shadow", "1").lower() in ("1", "true", "yes"))
     shadow_opacity = _f("shadow_opacity", 0.4)
     shadow_blur = _i("shadow_blur", 12)
     shadow_dx = _i("shadow_dx", 8)
     shadow_dy = _i("shadow_dy", 8)
-
     anchor = (request.values.get("anchor") or "center").lower()
     allowed_anchors = {
         "center", "topleft", "topright", "bottomleft", "bottomright",
@@ -168,7 +161,6 @@ def render_preview():
     # aspect from first cutout
     base_cut = cut_images[0]
     tw = max(1, int((th / base_cut.height) * base_cut.width))
-
     # cap cutouts to something sensible (e.g., 1920)
     if max(tw, th) > RENDER_OUT_MAX_W:
         r = RENDER_OUT_MAX_W / float(max(tw, th))
@@ -212,6 +204,14 @@ def render_preview():
             x = x0 + (i * int(w * 0.1))
             y = y0 + (i * int(h * 0.1))
             _paste_cropped(out, cut, x, y)
+
+    # Debug save
+    debug_path = "/tmp/debug_render.png"
+    try:
+        out.save(debug_path, "PNG")
+        current_app.logger.info(f"Debug render saved to {debug_path}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to save debug render: {e}")
 
     # 8) Final output width cap (default 1920)
     out = _constrain_max_width(out, RENDER_OUT_MAX_W)
