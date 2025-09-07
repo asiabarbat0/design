@@ -1,11 +1,10 @@
 from flask import Blueprint, request, abort, send_file, current_app, jsonify
-import io, requests
-from PIL import Image, ImageFilter
-from PIL import ImageEnhance
+import io, requests, os, time
+from PIL import Image, ImageFilter, ImageEnhance
+from PIL import ImageOps
+from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
-import os
-from werkzeug.utils import secure_filename  # Added for file upload security
-import time  # Added for time.time()
+import numpy as np
 
 bp = Blueprint("render", __name__, url_prefix="/render")
 TIMEOUT = 15
@@ -36,7 +35,6 @@ def _open_rgba(url: str) -> Image.Image:
         abort(415, f"unsupported or unreachable image: {url} ({e})")
 
 def _paste_cropped(base: Image.Image, fg: Image.Image, x: int, y: int):
-    """Paste fg onto base at (x,y) with alpha, cropping if it goes out of bounds."""
     bx, by = base.size
     fw, fh = fg.size
     cx0, cy0 = 0, 0
@@ -56,7 +54,6 @@ def _paste_cropped(base: Image.Image, fg: Image.Image, x: int, y: int):
     base.alpha_composite(crop, (dx, dy))
 
 def _make_shadow(cut: Image.Image, opacity: float = 0.4, blur: int = 12) -> Image.Image:
-    """Create a black soft shadow from the cutout's alpha."""
     if cut.mode != "RGBA":
         cut = cut.convert("RGBA")
     mask = cut.split()[3].point(lambda p: int(p * max(0.0, min(1.0, opacity))))
@@ -72,13 +69,10 @@ def _parse_int(name: str, val: str) -> int:
         abort(400, f"invalid {name}: {val!r} (must be integer)")
     return n
 
-# --- NEW: force final output size (defaults to 1920w unless overridden) ---
 def _final_resize(img: Image.Image, default_width: int = 1920) -> Image.Image:
-    """Resize final composite to a target width/height (preserve aspect)."""
     W, H = img.size
     out_w = request.values.get("out_width")
     out_h = request.values.get("out_height")
-
     if out_w:
         w = _parse_int("out_width", out_w)
         if w <= 0:
@@ -94,20 +88,16 @@ def _final_resize(img: Image.Image, default_width: int = 1920) -> Image.Image:
             return img
         w = default_width
         h = max(1, int(H * (w / W)))
-
     return img.resize((w, h), Image.LANCZOS)
 
-@bp.route("/render", methods=["GET", "POST"])  # NOTE: With url_prefix='/render', this is '/render/render'
+@bp.route("/render", methods=["GET", "POST"])
 def preview():
-    current_app.logger.info(
-        f"Render preview called with method={request.method}, cutouts={request.args.get('cutouts')}"
-    )
-    base_static = "/Users/asiabarbato/Downloads/designstreamaigrok/static"
+    current_app.logger.info(f"Render preview called with method={request.method}, cutouts={request.args.get('cutouts')}")
+    base_static = os.path.join(os.path.dirname(__file__), "static")  # Dynamic path
     room_path = os.path.join(base_static, "unsplash-image-mw_mj-noYHM.png")
     cutout_paths = []
 
     if request.method == "POST":
-        # Handle uploaded files
         if "room" not in request.files:
             abort(400, "No room image uploaded")
         room_file = request.files["room"]
@@ -115,7 +105,6 @@ def preview():
             abort(400, "No selected room image")
         room_path = os.path.join(base_static, secure_filename(room_file.filename))
         room_file.save(room_path)
-
         if "cutouts" not in request.files:
             abort(400, "No cutout images uploaded")
         cutout_files = request.files.getlist("cutouts")
@@ -124,14 +113,10 @@ def preview():
         cutout_paths = [os.path.join(base_static, secure_filename(f.filename)) for f in cutout_files]
         for i, path in enumerate(cutout_paths):
             cutout_files[i].save(path)
-
     else:  # GET method
         cutouts_param = request.args.get("cutouts")
         if cutouts_param:
-            cutout_paths = [
-                os.path.join(base_static, os.path.basename(n.strip()))
-                for n in cutouts_param.split(",")
-            ]
+            cutout_paths = [os.path.join(base_static, os.path.basename(n.strip())) for n in cutouts_param.split(",")]
 
     cuts = []
     try:
@@ -139,9 +124,7 @@ def preview():
             abort(400, f"room image not found: {os.path.basename(room_path)}")
         room = Image.open(room_path).convert("RGBA")
         current_app.logger.info(f"Room image path: {room_path}, size={room.size}")
-        # Save the *source room* separately for debugging
         room.save("/tmp/debug_room.png", "PNG")
-
         for i, path in enumerate(cutout_paths):
             if os.path.exists(path):
                 cut = Image.open(path).convert("RGBA")
@@ -188,15 +171,14 @@ def preview():
         for i, cut in enumerate(cuts):
             if (tw, th) != cut.size:
                 cuts[i] = cut.resize((tw, th), Image.LANCZOS)
-            # Size optimization
             if max(tw, th) > 1920:
                 ratio = 1920 / max(tw, th)
                 tw_new, th_new = int(tw * ratio), int(th * ratio)
                 cuts[i] = cuts[i].resize((tw_new, th_new), Image.LANCZOS)
                 current_app.logger.info(f"Resized cutout to fit 1920px max: {tw_new}x{th_new}")
-            tw, th = cuts[0].size  # Update tw, th after optimization
-
+        tw, th = cuts[0].size
         w, h = cuts[0].size
+
         opacity_arg = request.args.get("opacity", "1.0") if request.method == "GET" else request.form.get("opacity", "1.0")
         try:
             opacity = float(opacity_arg)
@@ -293,33 +275,30 @@ def preview():
             else:
                 current_app.logger.warning(f"Light file {light_path} not found")
 
-        # --- NEW: final resize to 1920-wide unless overridden with out_width/out_height ---
+        # Final resize
         out = _final_resize(out, default_width=1920)
 
-        # stream PNG
+        # Stream PNG
         buf = io.BytesIO()
         out.save(buf, "PNG")
         png_bytes = buf.getvalue()
-        with open("/tmp/debug_render.png", "wb") as f:
+        render_path = "/tmp/debug_render.png"
+        with open(render_path, "wb") as f:
             f.write(png_bytes)
-        return send_file(
-            io.BytesIO(png_bytes),
-            mimetype="image/png",
-            as_attachment=False,
-            download_name="render.png",
-        )
+        render_url = f"/static/debug_render.png?{int(time.time())}"
+        return jsonify({"url": render_url, "status": "success"}), 200
 
     except HTTPException:
         raise
     except Exception as e:
         current_app.logger.exception("render failed")
-        abort(500, f"render failed: {e}")
+        return jsonify({"error": f"render failed: {e}", "code": 500}), 500
 
 @bp.route("/api/render", methods=["GET", "POST"])
 def api_render():
     print("API render route hit")  # Debug print
     current_app.logger.info(f"API render called with method={request.method}, cutouts={request.args.get('cutouts')}")
-    base_static = "/Users/asiabarbato/Downloads/designstreamaigrok/static"
+    base_static = os.path.join(os.path.dirname(__file__), "static")
     room_path = os.path.join(base_static, "unsplash-image-mw_mj-noYHM.png")
     cutout_paths = []
 
@@ -331,7 +310,6 @@ def api_render():
             return jsonify({"error": "No selected room image", "code": 400}), 400
         room_path = os.path.join(base_static, secure_filename(room_file.filename))
         room_file.save(room_path)
-
         if "cutouts" not in request.files:
             return jsonify({"error": "No cutout images uploaded", "code": 400}), 400
         cutout_files = request.files.getlist("cutouts")
@@ -340,14 +318,10 @@ def api_render():
         cutout_paths = [os.path.join(base_static, secure_filename(f.filename)) for f in cutout_files]
         for i, path in enumerate(cutout_paths):
             cutout_files[i].save(path)
-
     else:  # GET method
         cutouts_param = request.args.get("cutouts")
         if cutouts_param:
-            cutout_paths = [
-                os.path.join(base_static, os.path.basename(n.strip()))
-                for n in cutouts_param.split(",")
-            ]
+            cutout_paths = [os.path.join(base_static, os.path.basename(n.strip())) for n in cutouts_param.split(",")]
 
     cuts = []
     try:
@@ -355,8 +329,7 @@ def api_render():
             return jsonify({"error": f"Room image not found: {os.path.basename(room_path)}", "code": 400}), 400
         room = Image.open(room_path).convert("RGBA")
         current_app.logger.info(f"Room image path: {room_path}, size={room.size}")
-        room.save("/tmp/debug_room.png", "PNG")  # Save the source room
-
+        room.save("/tmp/debug_room.png", "PNG")
         for i, path in enumerate(cutout_paths):
             if os.path.exists(path):
                 cut = Image.open(path).convert("RGBA")
@@ -408,9 +381,9 @@ def api_render():
                 tw_new, th_new = int(tw * ratio), int(th * ratio)
                 cuts[i] = cuts[i].resize((tw_new, th_new), Image.LANCZOS)
                 current_app.logger.info(f"Resized cutout to fit 1920px max: {tw_new}x{th_new}")
-            tw, th = cuts[0].size
-
+        tw, th = cuts[0].size
         w, h = cuts[0].size
+
         opacity_arg = request.args.get("opacity", "1.0") if request.method == "GET" else request.form.get("opacity", "1.0")
         try:
             opacity = float(opacity_arg)
@@ -507,10 +480,10 @@ def api_render():
             else:
                 current_app.logger.warning(f"Light file {light_path} not found")
 
-        # --- NEW: final resize to 1920-wide unless overridden ---
+        # Final resize
         out = _final_resize(out, default_width=1920)
 
-        # stream PNG and return JSON
+        # Stream PNG and return JSON
         buf = io.BytesIO()
         out.save(buf, "PNG")
         png_bytes = buf.getvalue()
