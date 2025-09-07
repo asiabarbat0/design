@@ -1,12 +1,13 @@
 import os
-from ultralytics import YOLO  # Fixed typo from utlralytics to ultralytics
+from ultralytics import YOLO
 from flask import Blueprint, request, abort, send_file, current_app
 import io
 from PIL import Image
 import requests
 import rembg
 from typing import Optional
-import numpy as np  # Already present
+import numpy as np
+from scipy import ndimage  # Added for zoom
 
 bp = Blueprint("matting", __name__, url_prefix="/matting")
 
@@ -63,16 +64,17 @@ def preview():
         mask = results[0].masks.data[0].cpu().numpy() if results[0].masks else None
         if mask is not None:
             alpha = (mask * 255).astype(np.uint8)
-            # Resize alpha to match im dimensions
-            alpha_resized = np.resize(alpha, im.size[::-1])  # (height, width)
-            # Create a single-channel alpha layer with proper shape
-            alpha_3d = np.zeros(im.size + (1,), dtype=np.uint8)  # Shape: (height, width, 1)
-            alpha_3d[:, :, 0] = alpha_resized
+            h, w = im.size
+            # Use ndimage.zoom for proper resizing
+            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1).astype(np.uint8)
+            # Ensure alpha_3d is (height, width, 1) for RGBA
+            alpha_3d = np.zeros((h, w, 1), dtype=np.uint8)
+            alpha_3d[:, :, 0] = np.clip(alpha_resized, 0, 255)  # Clip to valid range
             matted = Image.fromarray(np.dstack((np.array(im), alpha_3d[:, :, 0])))
         else:
             current_app.logger.warning("YOLO segmentation failed, falling back to rembg")
             matted = rembg.remove(im, session=SESSION, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
-    else:  # rembg or human model
+    else:
         session = SESSION if model_type.lower() != "human" else rembg.new_session("isnet-general-human-seg")
         matted = rembg.remove(im, session=session, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
 
