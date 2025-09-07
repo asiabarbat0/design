@@ -65,7 +65,11 @@ def preview():
         if mask is not None:
             alpha = (mask * 255).astype(np.uint8)
             h, w = im.size
-            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1, mode='constant').astype(np.uint8)
+            # Use ndimage.zoom with proper shape preservation
+            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1, mode='constant', prefilter=True).astype(np.uint8)
+            if alpha_resized.shape != (h, w):
+                current_app.logger.error(f"Resized alpha shape {alpha_resized.shape} does not match image shape {im.size}")
+                alpha_resized = np.resize(alpha_resized, (h, w))
             alpha_3d = np.zeros((h, w, 1), dtype=np.uint8)
             alpha_3d[:, :, 0] = np.clip(alpha_resized, 0, 255)
             matted = Image.fromarray(np.dstack((np.array(im), alpha_3d[:, :, 0])))
