@@ -1,18 +1,25 @@
-from flask import Blueprint, request, abort, send_file, current_app, jsonify
-import io, requests, os, time
+# app/services/render.py
+import io
+import os
+from urllib.parse import urlparse
+from typing import List, Tuple
+
+import requests
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
+
+from flask import Blueprint, request, abort, send_file, current_app
 from werkzeug.utils import secure_filename
-from werkzeug.exceptions import HTTPException
-import numpy as np
 
 bp = Blueprint("render", __name__, url_prefix="/render")
-TIMEOUT = 15
+
+TIMEOUT = 20
 MAX_BYTES = 25 * 1024 * 1024  # 25MB
-BASE_STATIC = os.path.join(os.path.dirname(__file__), "static")
+RENDER_OUT_MAX_W = int(os.getenv("RENDER_OUT_MAX_W", "1920"))  # final output width cap
+
+# ------------------ fetch / open helpers ------------------
 
 def _fetch_bytes(url: str) -> bytes:
-    current_app.logger.info(f"Fetching bytes from {url}")
-    with requests.get(url, timeout=TIMEOUT, stream=True) as r:
+    with requests.get(url, timeout=TIMEOUT, stream=True, headers={"User-Agent": "designstream-render/1.0"}) as r:
         r.raise_for_status()
         cl = r.headers.get("content-length")
         if cl and cl.isdigit() and int(cl) > MAX_BYTES:
@@ -25,20 +32,39 @@ def _fetch_bytes(url: str) -> bytes:
             buf.write(chunk)
         return buf.getvalue()
 
-def _open_rgba(url: str) -> Image.Image:
-    current_app.logger.info(f"Opening RGBA from {url}")
+def _open_rgba_from_url(url: str) -> Image.Image:
     try:
-        img = Image.open(io.BytesIO(_fetch_bytes(url))).convert("RGBA")
-        return img
+        data = _fetch_bytes(url)
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)  # fix orientation
+        return img.convert("RGBA")
     except Exception as e:
-        current_app.logger.error(f"Failed to open {url}: {e}")
         abort(415, f"unsupported or unreachable image: {url} ({e})")
+
+def _open_rgba_from_upload(fs) -> Image.Image:
+    try:
+        # read from the uploaded file object directly
+        data = fs.read()
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGBA")
+    except Exception as e:
+        abort(415, f"bad uploaded image {fs.filename!r}: {e}")
+
+def _basename_from_url(url: str) -> str:
+    """
+    Safe filename from URL path only (drops query string).
+    """
+    p = urlparse(url)
+    name = os.path.basename(p.path) or "image"
+    return secure_filename(name)
+
+# ------------------ compositing helpers ------------------
 
 def _paste_cropped(base: Image.Image, fg: Image.Image, x: int, y: int):
     bx, by = base.size
     fw, fh = fg.size
-    cx0, cy0 = 0, 0
-    cx1, cy1 = fw, fh
+    cx0, cy0, cx1, cy1 = 0, 0, fw, fh
     dx, dy = x, y
     if dx < 0:
         cx0 = min(fw, -dx); dx = 0
@@ -59,249 +85,139 @@ def _make_shadow(cut: Image.Image, opacity: float = 0.4, blur: int = 12) -> Imag
     mask = cut.split()[3].point(lambda p: int(p * max(0.0, min(1.0, opacity))))
     black = Image.new("RGBA", cut.size, (0, 0, 0, 255))
     shadow = Image.composite(black, Image.new("RGBA", cut.size, (0, 0, 0, 0)), mask)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
-    return shadow
+    return shadow.filter(ImageFilter.GaussianBlur(blur))
 
-def _parse_int(name: str, val: str) -> int:
-    try:
-        n = int(val)
-    except (TypeError, ValueError):
-        abort(400, f"invalid {name}: {val!r} (must be integer)")
-    return n
+def _constrain_max_width(im: Image.Image, max_w: int) -> Image.Image:
+    w, h = im.size
+    if w <= max_w:
+        return im
+    new_h = int(h * (max_w / float(w)))
+    return im.resize((max_w, new_h), Image.LANCZOS)
 
-def _final_resize(img: Image.Image, default_width: int = 1920) -> Image.Image:
-    W, H = img.size
-    out_w = request.values.get("out_width")
-    out_h = request.values.get("out_height")
-    if out_w:
-        w = _parse_int("out_width", out_w)
-        if w <= 0:
-            abort(400, f"invalid out_width: {w}")
-        h = max(1, int(H * (w / W)))
-    elif out_h:
-        h = _parse_int("out_height", out_h)
-        if h <= 0:
-            abort(400, f"invalid out_height: {h}")
-        w = max(1, int(W * (h / H)))
+# ------------------ main route ------------------
+
+@bp.route("/", methods=["GET", "POST"])
+def render_preview():
+    """
+    GET  /render?room_url=...&cutouts=url1,url2&anchor=center&fit=0.5&shadow=1
+    POST /render  (multipart/form-data)
+         fields:
+           - room:    file
+           - cutouts: file (repeatable)
+           - anchor, fit, shadow, opacity, etc. (optional)
+    Returns image/png.
+    """
+    # 1) Load room image
+    if request.method == "POST" and "room" in request.files:
+        room = _open_rgba_from_upload(request.files["room"])
     else:
-        if W <= default_width:
-            return img
-        w = default_width
-        h = max(1, int(H * (w / W)))
-    return img.resize((w, h), Image.LANCZOS)
-
-@bp.route("/render", methods=["GET", "POST"])
-def preview():
-    current_app.logger.info(f"Render preview called with method={request.method}, cutouts={request.args.get('cutouts')}")
-    base_static = BASE_STATIC
-    room_path = None
-
-    if request.method == "POST":
-        if "room" not in request.files:
-            abort(400, "No room image uploaded")
-        room_file = request.files["room"]
-        if room_file.filename == "":
-            abort(400, "No selected room image")
-        room_path = os.path.join(base_static, secure_filename(room_file.filename))
-        room_file.save(room_path)
-        if "cutouts" not in request.files:
-            abort(400, "No cutout images uploaded")
-        cutout_files = request.files.getlist("cutouts")
-        if not cutout_files or all(f.filename == "" for f in cutout_files):
-            abort(400, "No selected cutout images")
-        cutout_paths = [os.path.join(base_static, secure_filename(f.filename)) for f in cutout_files]
-        for i, path in enumerate(cutout_paths):
-            cutout_files[i].save(path)
-    else:  # GET method
         room_url = request.args.get("room_url")
-        cutouts_param = request.args.get("cutouts")
-        if not room_url or not cutouts_param:
-            abort(400, "room_url and cutouts are required for GET")
-        room_path = os.path.join(base_static, secure_filename(os.path.basename(room_url)))
-        with open(room_path, "wb") as f:
-            f.write(_fetch_bytes(room_url))
-        cutout_paths = [os.path.join(base_static, secure_filename(os.path.basename(n.strip()))) for n in cutouts_param.split(",")]
-        for path in cutout_paths:
-            if not os.path.exists(path):
-                with open(path, "wb") as f:
-                    f.write(_fetch_bytes(os.path.dirname(room_url) + "/" + os.path.basename(path)))
+        if not room_url:
+            abort(400, "room_url (GET) or room file (POST) is required")
+        room = _open_rgba_from_url(room_url)
 
-    cuts = []
-    try:
-        if not os.path.exists(room_path):
-            abort(400, f"room image not found: {os.path.basename(room_path)}")
-        room = Image.open(room_path).convert("RGBA")
-        current_app.logger.info(f"Room image path: {room_path}, size={room.size}")
-        room.save("/tmp/debug_room.png", "PNG")
-        for i, path in enumerate(cutout_paths):
-            if os.path.exists(path):
-                cut = Image.open(path).convert("RGBA")
-                current_app.logger.info(f"Cutout {i} loaded from {path}, size={cut.size}")
-                cut.save(f"/tmp/debug_cutout{i}.png", "PNG")
-                cuts.append(cut)
-            else:
-                current_app.logger.warning(f"Cutout {path} not found, skipping")
-        if not cuts:
-            abort(400, "No valid cutout images found")
+    # 2) Load cutouts
+    cut_images: List[Image.Image] = []
+    if request.method == "POST" and "cutouts" in request.files:
+        for fs in request.files.getlist("cutouts"):
+            if fs and fs.filename:
+                cut_images.append(_open_rgba_from_upload(fs))
+    else:
+        cutouts_param = request.args.get("cutouts", "")
+        urls = [u.strip() for u in cutouts_param.split(",") if u.strip()]
+        for u in urls:
+            cut_images.append(_open_rgba_from_url(u))
+    if not cut_images:
+        abort(400, "no cutouts provided")
 
-        # Validate and process parameters
-        scale_arg = request.args.get("scale", "1.0") if request.method == "GET" else request.form.get("scale", "1.0")
+    # 3) Params
+    def _f(name: str, default: float) -> float:
+        v = request.values.get(name, str(default))
         try:
-            scale = float(scale_arg)
-        except ValueError:
-            abort(400, f"non-numeric scale: {scale_arg!r}")
-        if scale <= 0:
-            abort(400, f"invalid scale: {scale} (must be > 0)")
+            return float(v)
+        except Exception:
+            abort(400, f"invalid float for {name}: {v!r}")
 
-        fit_value = request.args.get("fit") if request.method == "GET" else request.form.get("fit")
-        if fit_value is not None:
-            try:
-                fit_scale = float(fit_value)
-            except ValueError:
-                abort(400, f"non-numeric fit: {fit_value!r}")
-            if not (0 < fit_scale <= 1):
-                abort(400, f"fit {fit_value} out of range (0 < fit <= 1)")
-        else:
-            fit_scale = 0.5
-
-        width_arg = request.args.get("width") if request.method == "GET" else request.form.get("width")
-        height_arg = request.args.get("height") if request.method == "GET" else request.form.get("height")
-        if width_arg or height_arg:
-            tw = _parse_int("width", width_arg) if width_arg else int(cuts[0].width * scale)
-            th = _parse_int("height", height_arg) if height_arg else int(cuts[0].height * scale)
-        else:
-            W, H = room.size
-            th = int(H * fit_scale)
-            tw = int((th / cuts[0].height) * cuts[0].width)
-        if tw <= 0 or th <= 0:
-            abort(400, f"invalid target size: {tw}x{th}")
-
-        for i, cut in enumerate(cuts):
-            if (tw, th) != cut.size:
-                cuts[i] = cut.resize((tw, th), Image.LANCZOS)
-            if max(tw, th) > 1920:
-                ratio = 1920 / max(tw, th)
-                tw_new, th_new = int(tw * ratio), int(th * ratio)
-                cuts[i] = cuts[i].resize((tw_new, th_new), Image.LANCZOS)
-                current_app.logger.info(f"Resized cutout to fit 1920px max: {tw_new}x{th_new}")
-        tw, th = cuts[0].size
-        w, h = cuts[0].size
-
-        opacity_arg = request.args.get("opacity", "1.0") if request.method == "GET" else request.form.get("opacity", "1.0")
+    def _i(name: str, default: int) -> int:
+        v = request.values.get(name, str(default))
         try:
-            opacity = float(opacity_arg)
-        except ValueError:
-            abort(400, f"non-numeric opacity: {opacity_arg!r}")
-        if not (0.0 <= opacity <= 1.0):
-            abort(400, f"invalid opacity: {opacity} (must be between 0 and 1)")
+            return int(v)
+        except Exception:
+            abort(400, f"invalid int for {name}: {v!r}")
+
+    scale = _f("scale", 1.0)      # uniform scale for explicit width/height branch
+    fit = _f("fit", 0.5)          # fraction of room height
+    opacity = _f("opacity", 1.0)  # 0..1
+    shadow_on = (request.values.get("shadow", "1").lower() in ("1", "true", "yes"))
+    shadow_opacity = _f("shadow_opacity", 0.4)
+    shadow_blur = _i("shadow_blur", 12)
+    shadow_dx = _i("shadow_dx", 8)
+    shadow_dy = _i("shadow_dy", 8)
+
+    anchor = (request.values.get("anchor") or "center").lower()
+    allowed_anchors = {
+        "center", "topleft", "topright", "bottomleft", "bottomright",
+        "top", "bottom", "left", "right"
+    }
+    if anchor not in allowed_anchors:
+        abort(400, f"invalid anchor: {anchor!r}; allowed={sorted(allowed_anchors)}")
+
+    # 4) Compute target size for the first cutout
+    W, H = room.size
+    th = max(1, int(H * max(0.0, min(1.0, fit))))
+    # aspect from first cutout
+    base_cut = cut_images[0]
+    tw = max(1, int((th / base_cut.height) * base_cut.width))
+
+    # cap cutouts to something sensible (e.g., 1920)
+    if max(tw, th) > RENDER_OUT_MAX_W:
+        r = RENDER_OUT_MAX_W / float(max(tw, th))
+        tw, th = max(1, int(tw * r)), max(1, int(th * r))
+
+    # 5) Prepare cutouts (resize, opacity)
+    prepared: List[Image.Image] = []
+    for c in cut_images:
+        ci = c.resize((tw, th), Image.LANCZOS) if c.size != (tw, th) else c.copy()
         if opacity < 1.0:
-            for i, cut in enumerate(cuts):
-                a = cut.getchannel("A").point(lambda p: int(p * opacity))
-                c2 = cut.copy()
-                c2.putalpha(a)
-                cuts[i] = c2
+            a = ci.getchannel("A").point(lambda p: int(p * opacity))
+            ci.putalpha(a)
+        prepared.append(ci)
+    w, h = prepared[0].size
 
-        anchor = (request.args.get("anchor") or "center").lower() if request.method == "GET" else request.form.get("anchor", "center").lower()
-        allowed_anchors = {"center", "topleft", "topright", "bottomleft", "bottomright", "top", "bottom", "left", "right"}
-        if anchor not in allowed_anchors:
-            abort(400, f"invalid anchor: {anchor!r}; allowed={sorted(allowed_anchors)}")
-        x_arg = request.args.get("x") if request.method == "GET" else request.form.get("x")
-        y_arg = request.args.get("y") if request.method == "GET" else request.form.get("y")
-        if x_arg is not None and y_arg is not None:
-            x_base = _parse_int("x", x_arg)
-            y_base = _parse_int("y", y_arg)
-        else:
-            W, H = room.size
-            anchors = {
-                "center": ((W - w) // 2, (H - h) // 2),
-                "topleft": (0, 0),
-                "topright": (W - w, 0),
-                "bottomleft": (0, H - h),
-                "bottomright": (W - w, H - h),
-                "top": ((W - w) // 2, 0),
-                "bottom": ((W - w) // 2, H - h),
-                "left": (0, (H - h) // 2),
-                "right": (W - w, (H - h) // 2),
-            }
-            x_base, y_base = anchors[anchor]
+    # 6) Anchor to get base position
+    anchors = {
+        "center": ((W - w) // 2, (H - h) // 2),
+        "topleft": (0, 0),
+        "topright": (W - w, 0),
+        "bottomleft": (0, H - h),
+        "bottomright": (W - w, H - h),
+        "top": ((W - w) // 2, 0),
+        "bottom": ((W - w) // 2, H - h),
+        "left": (0, (H - h) // 2),
+        "right": (W - w, (H - h) // 2),
+    }
+    x0, y0 = anchors[anchor]
 
-        out = room.copy()
-        if request.args.get("shadow", "1").lower() in ("1", "true", "yes"):
-            s_op_arg = request.args.get("shadow_opacity", "0.4") if request.method == "GET" else request.form.get("shadow_opacity", "0.4")
-            s_bl_arg = request.args.get("shadow_blur", "12") if request.method == "GET" else request.form.get("shadow_blur", "12")
-            s_dx_arg = request.args.get("shadow_dx", "8") if request.method == "GET" else request.form.get("shadow_dx", "8")
-            s_dy_arg = request.args.get("shadow_dy", "8") if request.method == "GET" else request.form.get("shadow_dy", "8")
-            try:
-                s_op = float(s_op_arg)
-            except ValueError:
-                abort(400, f"non-numeric shadow_opacity: {s_op_arg!r}")
-            if not (0.0 <= s_op <= 1.0):
-                abort(400, f"invalid shadow_opacity: {s_op} (0..1)")
-            s_bl = _parse_int("shadow_blur", s_bl_arg)
-            s_dx = _parse_int("shadow_dx", s_dx_arg)
-            s_dy = _parse_int("shadow_dy", s_dy_arg)
-            for i, cut in enumerate(cuts):
-                x = x_base + (i * int(w * 0.1))
-                y = y_base + (i * int(h * 0.1))
-                shadow = _make_shadow(cut, opacity=s_op, blur=s_bl)
-                _paste_cropped(out, shadow, x + s_dx, y + s_dy)
-                _paste_cropped(out, cut, x, y)
-        else:
-            for i, cut in enumerate(cuts):
-                x = x_base + (i * int(w * 0.1))
-                y = y_base + (i * int(h * 0.1))
-                _paste_cropped(out, cut, x, y)
+    # 7) Composite
+    out = room.copy()
+    if shadow_on:
+        for i, cut in enumerate(prepared):
+            x = x0 + (i * int(w * 0.1))
+            y = y0 + (i * int(h * 0.1))
+            sh = _make_shadow(cut, opacity=shadow_opacity, blur=shadow_blur)
+            _paste_cropped(out, sh, x + shadow_dx, y + shadow_dy)
+            _paste_cropped(out, cut, x, y)
+    else:
+        for i, cut in enumerate(prepared):
+            x = x0 + (i * int(w * 0.1))
+            y = y0 + (i * int(h * 0.1))
+            _paste_cropped(out, cut, x, y)
 
-        curtains = request.args.get("curtains", "false").lower() if request.method == "GET" else request.form.get("curtains", "false").lower()
-        if curtains in ("1", "true", "yes"):
-            curtain_path = os.path.join(base_static, "curtain.png")
-            if os.path.exists(curtain_path):
-                curtain = Image.open(curtain_path).convert("RGBA")
-                current_app.logger.info(f"Curtain loaded from {curtain_path}, size={curtain.size}")
-                if curtain.size != room.size:
-                    curtain = curtain.resize(room.size, Image.LANCZOS)
-                    current_app.logger.info(f"Curtain resized to {room.size}")
-                _paste_cropped(out, curtain, 0, 0)
-            else:
-                current_app.logger.warning(f"Curtain file {curtain_path} not found")
+    # 8) Final output width cap (default 1920)
+    out = _constrain_max_width(out, RENDER_OUT_MAX_W)
 
-        light_effect = (request.args.get("lights", "none").lower() if request.method == "GET"
-                      else request.form.get("lights", "none").lower())
-        if light_effect in ("soft", "bright"):
-            light_path = os.path.join(base_static, f"light_{light_effect}.png")
-            if os.path.exists(light_path):
-                light = Image.open(light_path).convert("RGBA")
-                current_app.logger.info(f"Light {light_effect} loaded from {light_path}, size={light.size}")
-                if light.size != room.size:
-                    light = light.resize(room.size, Image.LANCZOS)
-                    current_app.logger.info(f"Light resized to {room.size}")
-                if light_effect == "bright":
-                    enhancer = ImageEnhance.Brightness(light)
-                    light = enhancer.enhance(4.5)
-                    current_app.logger.info("Applied bright enhancement with factor 4.5")
-                _paste_cropped(out, light, 0, 0)
-            else:
-                current_app.logger.warning(f"Light file {light_path} not found")
-
-        # Final resize
-        out = _final_resize(out, default_width=1920)
-
-        # Stream PNG and return JSON
-        buf = io.BytesIO()
-        out.save(buf, "PNG")
-        png_bytes = buf.getvalue()
-        render_path = "/tmp/debug_render.png"
-        with open(render_path, "wb") as f:
-            f.write(png_bytes)
-        render_url = f"/static/debug_render.png?{int(time.time())}"
-        return jsonify({"url": render_url, "status": "success"}), 200
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        current_app.logger.exception("render failed")
-        return jsonify({"error": f"render failed: {e}", "code": 500}), 500
-
-@bp.route("/test")
-def test_route():
-    return "Blueprint is working"
+    # 9) Stream PNG
+    buf = io.BytesIO()
+    out.save(buf, "PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png", as_attachment=False, download_name="render.png")
