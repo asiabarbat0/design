@@ -6,9 +6,9 @@ from app.services.matting import bp as matting_bp
 from app.services.render import bp as render_bp
 from pathlib import Path
 
-base_dir = Path(__file__).resolve().parent.parent
+base_dir = Path(__file__).resolve().parent.parent  # Project root
 app = create_app()
-app.static_folder = str(base_dir / "app/static")  # Explicitly set to match project structure
+app.static_folder = str(base_dir / "app/static")  # Explicitly set
 
 @app.get("/widget.js")
 def widget_js():
