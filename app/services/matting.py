@@ -1,27 +1,29 @@
 import os
-from ultralytics import YOLO
-from flask import Blueprint, request, abort, send_file, current_app
 import io
-from PIL import Image
+from flask import Blueprint, request, abort, send_file, current_app
+from PIL import Image, ImageOps
 import requests
 import rembg
-from typing import Optional
 import numpy as np
-from scipy import ndimage
 
 bp = Blueprint("matting", __name__, url_prefix="/matting")
 
-# Model setup
-model_path = "yolov8x-seg.pt"
-if not os.path.exists(model_path):
-    model = YOLO("yolov8x-seg.pt")
-else:
-    model = YOLO(model_path)
+# --- Try to load YOLO; fall back to rembg if unavailable ---
+_YOLO_AVAILABLE = True
+_YOLO_ERR = None
+try:
+    from ultralytics import YOLO
+    model_path = "yolov8x-seg.pt"
+    model = YOLO(model_path) if os.path.exists(model_path) else YOLO("yolov8x-seg.pt")
+except Exception as e:
+    _YOLO_AVAILABLE = False
+    _YOLO_ERR = e
 
 TIMEOUT = 20
 MAX_BYTES = 25 * 1024 * 1024  # 25MB
 MAX_SIDE = 2000
-SESSION = rembg.new_session()
+SESSION = rembg.new_session()  # default rembg session
+
 
 def _fetch_image(url: str) -> bytes:
     headers = {"User-Agent": "designstream-matting/1.0", "Accept": "image/*"}
@@ -38,61 +40,113 @@ def _fetch_image(url: str) -> bytes:
             buf.write(chunk)
         return buf.getvalue()
 
-def _normalize_unsplash(url: str) -> str:
-    if "unsplash.com" in url and not url.startswith("https://images.unsplash.com"):
-        return url.replace("www.unsplash.com", "images.unsplash.com")
-    return url
 
 @bp.get("/preview")
 def preview():
+    """
+    GET /matting/preview?image_url=...&model=rembg|yolo|human
+    - rembg: default
+    - yolo: uses Ultralytics segmentation if available
+    - human: rembg with human segmenter ("isnet-general-human-seg")
+    """
     url = request.args.get("image_url")
-    model_type = request.args.get("model", "rembg")
+    model_type = (request.args.get("model") or "rembg").lower()
     if not url:
         abort(400, "image_url is required")
-    
-    img_bytes = _fetch_image(url)
+
+    # Load image → normalize orientation → force RGB
     try:
-        im = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        img_bytes = _fetch_image(url)
+        im = Image.open(io.BytesIO(img_bytes))
+        im = ImageOps.exif_transpose(im).convert("RGB")
     except Exception:
         abort(415, "unsupported image format")
-    
+
+    # Constrain very large images for speed
     if max(im.size) > MAX_SIDE:
         im.thumbnail((MAX_SIDE, MAX_SIDE))
-    
-    if model_type.lower() == "yolo":
-        results = model(im)
-        mask = results[0].masks.data[0].cpu().numpy() if results[0].masks else None
-        if mask is not None:
-            alpha = (mask * 255).astype(np.uint8)
-            h, w = im.size
-            # Use ndimage.zoom with proper shape preservation
-            alpha_resized = ndimage.zoom(alpha, (h / alpha.shape[0], w / alpha.shape[1]), order=1, mode='constant', prefilter=True).astype(np.uint8)
-            if alpha_resized.shape != (h, w):
-                current_app.logger.error(f"Resized alpha shape {alpha_resized.shape} does not match image shape {im.size}")
-                alpha_resized = np.resize(alpha_resized, (h, w))
-            alpha_3d = np.zeros((h, w, 1), dtype=np.uint8)
-            alpha_3d[:, :, 0] = np.clip(alpha_resized, 0, 255)
-            matted = Image.fromarray(np.dstack((np.array(im), alpha_3d[:, :, 0])))
-        else:
-            current_app.logger.warning("YOLO segmentation failed, falling back to rembg")
-            matted = rembg.remove(im, session=SESSION, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
-    else:
-        session = SESSION if model_type.lower() != "human" else rembg.new_session("isnet-general-human-seg")
-        matted = rembg.remove(im, session=session, alpha_matting=True, alpha_matting_foreground_threshold=140, alpha_matting_background_threshold=60, alpha_matting_erode_size=35)
 
+    # ---- YOLO path ----
+    if model_type == "yolo" and _YOLO_AVAILABLE:
+        try:
+            # Ultralytics predict on ndarray; quiet logs
+            res = model.predict(source=np.array(im), imgsz=640, conf=0.25, verbose=False)[0]
+            masks = getattr(res, "masks", None)
+            if masks is None or masks.data is None:
+                current_app.logger.warning("YOLO returned no masks; falling back to rembg")
+                raise RuntimeError("no_yolo_masks")
+
+            m = masks.data  # torch.Tensor [N, Hm, Wm] in [0,1]
+            # -> numpy float32
+            m_np = m.detach().cpu().numpy() if hasattr(m, "detach") else np.asarray(m)
+
+            # Union all instance masks to one [Hm, Wm]
+            if m_np.ndim == 3:
+                union = m_np.max(axis=0)
+            elif m_np.ndim == 2:
+                union = m_np
+            else:
+                current_app.logger.warning(f"YOLO mask unexpected shape {m_np.shape}; falling back to rembg")
+                raise RuntimeError("bad_yolo_shape")
+
+            # Convert to uint8 alpha 0..255 and resize to image size (NEAREST to keep edges sharp)
+            mask_u8 = (np.clip(union, 0.0, 1.0) * 255.0).astype(np.uint8)
+            mask_img = Image.fromarray(mask_u8, mode="L").resize(im.size, Image.NEAREST)
+
+            # Compose alpha into the RGB image -> RGBA (exactly 4 channels)
+            rgba = im.copy()
+            rgba.putalpha(mask_img)
+            matted = rgba
+
+        except Exception as e:
+            current_app.logger.warning(f"YOLO segmentation failed ({e}); using rembg fallback")
+            # fall through to rembg
+            session = SESSION
+            matted = rembg.remove(
+                im,
+                session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=140,
+                alpha_matting_background_threshold=60,
+                alpha_matting_erode_size=35,
+            )
+
+    else:
+        # ---- rembg path (default or forced, or YOLO unavailable) ----
+        if model_type == "human":
+            session = rembg.new_session("isnet-general-human-seg")
+        else:
+            session = SESSION
+
+        matted = rembg.remove(
+            im,
+            session=session,
+            alpha_matting=True,
+            alpha_matting_foreground_threshold=140,
+            alpha_matting_background_threshold=60,
+            alpha_matting_erode_size=35,
+        )
+
+    # Ensure RGBA
     if matted.mode != "RGBA":
         matted = matted.convert("RGBA")
-    matted.save("/tmp/matting_debug.png", format="PNG")
-    current_app.logger.info("Matting debug saved to /tmp/matting_debug.png")
+
+    # Debug and basic sanity
+    try:
+        matted.save("/tmp/matting_debug.png", "PNG")
+        current_app.logger.info("Matting debug saved to /tmp/matting_debug.png")
+    except Exception:
+        pass
 
     alpha = np.array(matted.getchannel("A"))
     if int((alpha < 250).sum()) == 0:
         abort(422, "matting produced no transparency")
 
+    # Stream PNG
     out = io.BytesIO()
-    matted.save(out, format="PNG")
-    data = out.getvalue()
-    resp = send_file(io.BytesIO(data), mimetype="image/png", as_attachment=False, download_name="preview.png")
+    matted.save(out, "PNG")
+    out.seek(0)
+    resp = send_file(out, mimetype="image/png", as_attachment=False, download_name="preview.png")
     resp.headers["Cache-Control"] = "no-cache"
-    resp.headers["Content-Length"] = str(len(data))
+    resp.headers["Content-Length"] = str(len(out.getvalue()))
     return resp

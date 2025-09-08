@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+uploads/
+renders/
+data/
+models/
+**/raw/*
+**/samples/*
+**/notebooks/*
+**/tests/*
+**/docs/*

@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from typing import List, Tuple
 import requests
 import cv2
-import numpy as np  # Added missing import
+import numpy as np
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 from flask import Blueprint, request, abort, send_file, current_app
 from werkzeug.utils import secure_filename
@@ -32,10 +32,18 @@ def _fetch_bytes(url: str) -> bytes:
 
 def _open_rgba_from_url(url: str) -> Image.Image:
     try:
-        data = _fetch_bytes(url)
-        img = Image.open(io.BytesIO(data))
-        img = ImageOps.exif_transpose(img)  # fix orientation
-        return img.convert("RGBA")
+        if url.startswith("file://"):
+            local_path = url[7:]  # Remove file://
+            if not os.path.exists(local_path):
+                abort(415, f"Mask file not found: {local_path}")
+            img = Image.open(local_path)
+            img = ImageOps.exif_transpose(img)  # fix orientation
+            return img.convert("RGBA")
+        else:
+            data = _fetch_bytes(url)
+            img = Image.open(io.BytesIO(data))
+            img = ImageOps.exif_transpose(img)  # fix orientation
+            return img.convert("RGBA")
     except Exception as e:
         abort(415, f"unsupported or unreachable image: {url} ({e})")
 
@@ -93,10 +101,14 @@ def _constrain_max_width(im: Image.Image, max_w: int) -> Image.Image:
 
 def _inpaint_image(room: Image.Image, mask: Image.Image) -> Image.Image:
     """Inpaint the room image using a mask (white = area to remove)."""
+    # Resize mask to match room dimensions
+    mask = mask.resize(room.size, Image.Resampling.LANCZOS)
+
     # Convert PIL images to OpenCV format
     room_np = cv2.cvtColor(np.array(room), cv2.COLOR_RGBA2RGB)
     mask_np = cv2.cvtColor(np.array(mask.convert("RGB")), cv2.COLOR_RGB2GRAY)
     mask_np = cv2.threshold(mask_np, 1, 255, cv2.THRESH_BINARY)[1]  # Ensure binary mask
+
     # Apply inpainting
     inpainted = cv2.inpaint(room_np, mask_np, 3, cv2.INPAINT_TELEA)
     return Image.fromarray(cv2.cvtColor(inpainted, cv2.COLOR_RGB2RGBA))
@@ -129,14 +141,7 @@ def render_preview():
         mask = _open_rgba_from_upload(request.files["mask"])
     elif request.method == "GET" and "mask_url" in request.args:
         mask_url = request.args.get("mask_url")
-        if mask_url.startswith("file://"):
-            mask_path = mask_url[7:]  # Remove file:// prefix
-            if os.path.exists(mask_path):
-                mask = Image.open(mask_path).convert("RGBA")
-            else:
-                abort(415, f"Mask file not found: {mask_path}")
-        else:
-            mask = _open_rgba_from_url(mask_url)
+        mask = _open_rgba_from_url(mask_url)
     if mask:
         room = _inpaint_image(room, mask)
 
