@@ -4,6 +4,7 @@ import os
 from urllib.parse import urlparse
 from typing import List, Tuple
 import requests
+import cv2
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 from flask import Blueprint, request, abort, send_file, current_app
 from werkzeug.utils import secure_filename
@@ -89,6 +90,16 @@ def _constrain_max_width(im: Image.Image, max_w: int) -> Image.Image:
     new_h = int(h * (max_w / float(w)))
     return im.resize((max_w, new_h), Image.LANCZOS)
 
+def _inpaint_image(room: Image.Image, mask: Image.Image) -> Image.Image:
+    """Inpaint the room image using a mask (white = area to remove)."""
+    # Convert PIL images to OpenCV format
+    room_np = cv2.cvtColor(np.array(room), cv2.COLOR_RGBA2RGB)
+    mask_np = cv2.cvtColor(np.array(mask.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    mask_np = cv2.threshold(mask_np, 1, 255, cv2.THRESH_BINARY)[1]  # Ensure binary mask
+    # Apply inpainting
+    inpainted = cv2.inpaint(room_np, mask_np, 3, cv2.INPAINT_TELEA)
+    return Image.fromarray(cv2.cvtColor(inpainted, cv2.COLOR_RGB2RGBA))
+
 # ------------------ main route ------------------
 @bp.route("/", methods=["GET", "POST"], strict_slashes=False)
 def render_preview():
@@ -109,6 +120,15 @@ def render_preview():
         if not room_url:
             abort(400, "room_url (GET) or room file (POST) is required")
         room = _open_rgba_from_url(room_url)
+
+    # 2) Optional inpainting mask (placeholder for now)
+    mask_url = request.args.get("mask_url") if request.method == "GET" else request.form.get("mask")
+    if mask_url or (request.method == "POST" and "mask" in request.files):
+        if request.method == "POST" and "mask" in request.files:
+            mask = _open_rgba_from_upload(request.files["mask"])
+        else:
+            mask = _open_rgba_from_url(mask_url)
+        room = _inpaint_image(room, mask)
 
     # 2) Load cutouts
     cut_images: List[Image.Image] = []
