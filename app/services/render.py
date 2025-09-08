@@ -117,6 +117,8 @@ def _perspective_transform(cut: Image.Image, src_points: List[Tuple[int, int]], 
     # Ensure destination size matches the transformed region
     width = int(max(dst_pts[:, 0]) - min(dst_pts[:, 0]))
     height = int(max(dst_pts[:, 1]) - min(dst_pts[:, 1]))
+    if width <= 0 or height <= 0:
+        abort(400, "Invalid destination points: width or height must be positive")
     transformed = cv2.warpPerspective(cut_np, matrix, (width, height))
     return Image.fromarray(transformed)
 
@@ -199,7 +201,7 @@ def render_preview():
     if anchor not in allowed_anchors:
         abort(400, f"invalid anchor: {anchor!r}; allowed={sorted(allowed_anchors)}")
 
-    # 4) Compute target size and anchor position
+    # 4) Compute target size
     W, H = room.size
     th = max(1, int(H * max(0.0, min(1.0, fit))))
     base_cut = cut_images[0]
@@ -226,13 +228,18 @@ def render_preview():
     perspective_src = request.values.get("perspective_src")
     perspective_dst = request.values.get("perspective_dst")
     if perspective_src and perspective_dst:
-        src_points = [tuple(map(int, p.split(','))) for p in perspective_src.split()]
-        dst_points = [tuple(map(int, p.split(','))) for p in perspective_dst.split()]
-        if len(src_points) != 4 or len(dst_points) != 4:
-            abort(400, "perspective_src and perspective_dst must each provide 4 points (x1,y1,x2,y2,x3,y3,x4,y4)")
+        try:
+            src_points = [tuple(map(int, perspective_src.split(',')))[:8]]  # Expect 8 values (4 points)
+            dst_points = [tuple(map(int, perspective_dst.split(',')))[:8]]  # Expect 8 values (4 points)
+            src_points = [(src_points[0][i], src_points[0][i+1]) for i in range(0, 8, 2)]
+            dst_points = [(dst_points[0][i], dst_points[0][i+1]) for i in range(0, 8, 2)]
+            if len(src_points) != 4 or len(dst_points) != 4:
+                abort(400, "perspective_src and perspective_dst must provide 4 points each (x1,y1,x2,y2,x3,y3,x4,y4)")
+        except (ValueError, IndexError):
+            abort(400, "Invalid perspective points format: use x1,y1,x2,y2,x3,y3,x4,y4")
     else:
-        dst_points = [(x0, y0), (x0, y0 + th), (x0 + tw, y0 + th), (x0 + tw, y0)]  # Default destination
-        src_points = [(0, 0), (0, th), (tw, th), (tw, 0)]  # Default source (cutout corners)
+        dst_points = [(x0, y0), (x0, y0 + th), (x0 + tw, y0 + th), (x0 + tw, y0)]
+        src_points = [(0, 0), (0, th), (tw, th), (tw, 0)]
 
     # 7) Prepare cutouts (resize, perspective transform, opacity)
     prepared: List[Image.Image] = []
