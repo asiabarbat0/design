@@ -227,7 +227,7 @@ def render_preview():
     # 6) Perspective correction points
     perspective_src = request.values.get("perspective_src")
     perspective_dst = request.values.get("perspective_dst")
-    dx, dy = 0, 0  # Initialize offsets
+    dx, dy = 0, 0  # Default offsets
     if perspective_src and perspective_dst:
         try:
             src_coords = list(map(int, perspective_src.split(',')))
@@ -237,8 +237,8 @@ def render_preview():
             src_points = [(src_coords[i], src_coords[i+1]) for i in range(0, 8, 2)]
             dst_points = [(dst_coords[i], dst_coords[i+1]) for i in range(0, 8, 2)]
             # Calculate offset for placement
-            dx = min(p[0] for p in dst_points) - x0
-            dy = min(p[1] for p in dst_points) - y0
+            dx = min(p[0] for p in dst_points) - x0 if dst_points else 0
+            dy = min(p[1] for p in dst_points) - y0 if dst_points else 0
         except (ValueError, IndexError):
             abort(400, "Invalid perspective points format: use x1,y1,x2,y2,x3,y3,x4,y4")
     else:
@@ -252,7 +252,7 @@ def render_preview():
         if perspective_src and perspective_dst:
             ci = _perspective_transform(ci, src_points, dst_points)
             # Ensure the transformed image fits the target size
-            if ci.size[0] > 0 and ci.size[1] > 0:
+            if ci.size[0] > 0 and ci.size[1] > 0 and (ci.size[0] != tw or ci.size[1] != th):
                 ci = ci.resize((tw, th), Image.Resampling.LANCZOS)
         if opacity < 1.0:
             a = ci.getchannel("A").point(lambda p: int(p * opacity))
