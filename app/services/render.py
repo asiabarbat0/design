@@ -114,12 +114,12 @@ def _perspective_transform(cut: Image.Image, src_points: List[Tuple[int, int]], 
     dst_pts = np.float32(dst_points)
     matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
     cut_np = np.array(cut)
-    # Ensure destination size matches the transformed region
-    width = int(max(dst_pts[:, 0]) - min(dst_pts[:, 0]))
-    height = int(max(dst_pts[:, 1]) - min(dst_pts[:, 1]))
+    # Calculate destination size based on the bounding box of destination points
+    width = int(max(dst_pts[:, 0]) - min(dst_pts[:, 0]) + 1)
+    height = int(max(dst_pts[:, 1]) - min(dst_pts[:, 1]) + 1)
     if width <= 0 or height <= 0:
-        abort(400, "Invalid destination points: width or height must be positive")
-    transformed = cv2.warpPerspective(cut_np, matrix, (width, height))
+        return cut  # Return original if invalid size
+    transformed = cv2.warpPerspective(cut_np, matrix, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
     return Image.fromarray(transformed)
 
 # ------------------ main route ------------------
@@ -229,12 +229,12 @@ def render_preview():
     perspective_dst = request.values.get("perspective_dst")
     if perspective_src and perspective_dst:
         try:
-            src_points = [tuple(map(int, perspective_src.split(',')))[:8]]  # Expect 8 values (4 points)
-            dst_points = [tuple(map(int, perspective_dst.split(',')))[:8]]  # Expect 8 values (4 points)
-            src_points = [(src_points[0][i], src_points[0][i+1]) for i in range(0, 8, 2)]
-            dst_points = [(dst_points[0][i], dst_points[0][i+1]) for i in range(0, 8, 2)]
-            if len(src_points) != 4 or len(dst_points) != 4:
-                abort(400, "perspective_src and perspective_dst must provide 4 points each (x1,y1,x2,y2,x3,y3,x4,y4)")
+            src_coords = list(map(int, perspective_src.split(',')))
+            dst_coords = list(map(int, perspective_dst.split(',')))
+            if len(src_coords) != 8 or len(dst_coords) != 8:
+                abort(400, "perspective_src and perspective_dst must provide 8 values each (x1,y1,x2,y2,x3,y3,x4,y4)")
+            src_points = [(src_coords[i], src_coords[i+1]) for i in range(0, 8, 2)]
+            dst_points = [(dst_coords[i], dst_coords[i+1]) for i in range(0, 8, 2)]
         except (ValueError, IndexError):
             abort(400, "Invalid perspective points format: use x1,y1,x2,y2,x3,y3,x4,y4")
     else:
@@ -246,7 +246,13 @@ def render_preview():
     for c in cut_images:
         ci = c.resize((tw, th), Image.LANCZOS) if c.size != (tw, th) else c.copy()
         if perspective_src and perspective_dst:
+            # Adjust placement based on destination points
+            dx = min(p[0] for p in dst_points)
+            dy = min(p[1] for p in dst_points)
             ci = _perspective_transform(ci, src_points, dst_points)
+            # Resize to fit the transformed dimensions if needed
+            if ci.size[0] > 0 and ci.size[1] > 0:
+                ci = ci.resize((tw, th), Image.Resampling.LANCZOS)
         if opacity < 1.0:
             a = ci.getchannel("A").point(lambda p: int(p * opacity))
             ci.putalpha(a)
@@ -257,15 +263,15 @@ def render_preview():
     out = room.copy()
     if shadow_on:
         for i, cut in enumerate(prepared):
-            x = x0 + (i * int(w * 0.1))
-            y = y0 + (i * int(h * 0.1))
+            x = x0 + (i * int(w * 0.1)) - dx  # Adjust x based on perspective offset
+            y = y0 + (i * int(h * 0.1)) - dy  # Adjust y based on perspective offset
             sh = _make_shadow(cut, opacity=shadow_opacity, blur=shadow_blur)
             _paste_cropped(out, sh, x + shadow_dx, y + shadow_dy)
             _paste_cropped(out, cut, x, y)
     else:
         for i, cut in enumerate(prepared):
-            x = x0 + (i * int(w * 0.1))
-            y = y0 + (i * int(h * 0.1))
+            x = x0 + (i * int(w * 0.1)) - dx  # Adjust x based on perspective offset
+            y = y0 + (i * int(h * 0.1)) - dy  # Adjust y based on perspective offset
             _paste_cropped(out, cut, x, y)
 
     # Debug save
