@@ -101,17 +101,24 @@ def _constrain_max_width(im: Image.Image, max_w: int) -> Image.Image:
 
 def _inpaint_image(room: Image.Image, mask: Image.Image) -> Image.Image:
     """Inpaint the room image using a mask (white = area to remove)."""
-    # Resize mask to match room dimensions
     mask = mask.resize(room.size, Image.Resampling.LANCZOS)
-
-    # Convert PIL images to OpenCV format
     room_np = cv2.cvtColor(np.array(room), cv2.COLOR_RGBA2RGB)
     mask_np = cv2.cvtColor(np.array(mask.convert("RGB")), cv2.COLOR_RGB2GRAY)
-    mask_np = cv2.threshold(mask_np, 1, 255, cv2.THRESH_BINARY)[1]  # Ensure binary mask
-
-    # Apply inpainting
+    mask_np = cv2.threshold(mask_np, 1, 255, cv2.THRESH_BINARY)[1]
     inpainted = cv2.inpaint(room_np, mask_np, 3, cv2.INPAINT_TELEA)
     return Image.fromarray(cv2.cvtColor(inpainted, cv2.COLOR_RGB2RGBA))
+
+def _perspective_transform(cut: Image.Image, src_points: List[Tuple[int, int]], dst_points: List[Tuple[int, int]]) -> Image.Image:
+    """Apply perspective transformation to the cutout based on source and destination points."""
+    src_pts = np.float32(src_points)
+    dst_pts = np.float32(dst_points)
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    cut_np = np.array(cut)
+    # Ensure destination size matches the transformed region
+    width = int(max(dst_pts[:, 0]) - min(dst_pts[:, 0]))
+    height = int(max(dst_pts[:, 1]) - min(dst_pts[:, 1]))
+    transformed = cv2.warpPerspective(cut_np, matrix, (width, height))
+    return Image.fromarray(transformed)
 
 # ------------------ main route ------------------
 @bp.route("/", methods=["GET", "POST"], strict_slashes=False)
@@ -123,6 +130,8 @@ def render_preview():
            - room: file
            - cutouts: file (repeatable)
            - mask: file (optional)
+           - perspective_src: x1,y1,x2,y2,x3,y3,x4,y4 (source points)
+           - perspective_dst: x1,y1,x2,y2,x3,y3,x4,y4 (destination points)
            - anchor, fit, shadow, opacity, etc. (optional)
     Returns image/png.
     """
@@ -190,42 +199,54 @@ def render_preview():
     if anchor not in allowed_anchors:
         abort(400, f"invalid anchor: {anchor!r}; allowed={sorted(allowed_anchors)}")
 
-    # 4) Compute target size for the first cutout
+    # 4) Compute target size and anchor position
     W, H = room.size
     th = max(1, int(H * max(0.0, min(1.0, fit))))
-    # aspect from first cutout
     base_cut = cut_images[0]
     tw = max(1, int((th / base_cut.height) * base_cut.width))
-    # cap cutouts to something sensible (e.g., 1920)
     if max(tw, th) > RENDER_OUT_MAX_W:
         r = RENDER_OUT_MAX_W / float(max(tw, th))
         tw, th = max(1, int(tw * r)), max(1, int(th * r))
 
-    # 5) Prepare cutouts (resize, opacity)
+    # 5) Anchor to get base position
+    anchors = {
+        "center": ((W - tw) // 2, (H - th) // 2),
+        "topleft": (0, 0),
+        "topright": (W - tw, 0),
+        "bottomleft": (0, H - th),
+        "bottomright": (W - tw, H - th),
+        "top": ((W - tw) // 2, 0),
+        "bottom": ((W - tw) // 2, H - th),
+        "left": (0, (H - th) // 2),
+        "right": (W - tw, (H - th) // 2),
+    }
+    x0, y0 = anchors[anchor]
+
+    # 6) Perspective correction points
+    perspective_src = request.values.get("perspective_src")
+    perspective_dst = request.values.get("perspective_dst")
+    if perspective_src and perspective_dst:
+        src_points = [tuple(map(int, p.split(','))) for p in perspective_src.split()]
+        dst_points = [tuple(map(int, p.split(','))) for p in perspective_dst.split()]
+        if len(src_points) != 4 or len(dst_points) != 4:
+            abort(400, "perspective_src and perspective_dst must each provide 4 points (x1,y1,x2,y2,x3,y3,x4,y4)")
+    else:
+        dst_points = [(x0, y0), (x0, y0 + th), (x0 + tw, y0 + th), (x0 + tw, y0)]  # Default destination
+        src_points = [(0, 0), (0, th), (tw, th), (tw, 0)]  # Default source (cutout corners)
+
+    # 7) Prepare cutouts (resize, perspective transform, opacity)
     prepared: List[Image.Image] = []
     for c in cut_images:
         ci = c.resize((tw, th), Image.LANCZOS) if c.size != (tw, th) else c.copy()
+        if perspective_src and perspective_dst:
+            ci = _perspective_transform(ci, src_points, dst_points)
         if opacity < 1.0:
             a = ci.getchannel("A").point(lambda p: int(p * opacity))
             ci.putalpha(a)
         prepared.append(ci)
     w, h = prepared[0].size
 
-    # 6) Anchor to get base position
-    anchors = {
-        "center": ((W - w) // 2, (H - h) // 2),
-        "topleft": (0, 0),
-        "topright": (W - w, 0),
-        "bottomleft": (0, H - h),
-        "bottomright": (W - w, H - h),
-        "top": ((W - w) // 2, 0),
-        "bottom": ((W - w) // 2, H - h),
-        "left": (0, (H - h) // 2),
-        "right": (W - w, (H - h) // 2),
-    }
-    x0, y0 = anchors[anchor]
-
-    # 7) Composite
+    # 8) Composite
     out = room.copy()
     if shadow_on:
         for i, cut in enumerate(prepared):
@@ -248,10 +269,10 @@ def render_preview():
     except Exception as e:
         current_app.logger.error(f"Failed to save debug render: {e}")
 
-    # 8) Final output width cap (default 1920)
+    # 9) Final output width cap (default 1920)
     out = _constrain_max_width(out, RENDER_OUT_MAX_W)
 
-    # 9) Stream PNG
+    # 10) Stream PNG
     buf = io.BytesIO()
     out.save(buf, "PNG")
     buf.seek(0)
