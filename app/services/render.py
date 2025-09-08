@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from typing import List, Tuple
 import requests
 import cv2
+import numpy as np  # Added missing import
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 from flask import Blueprint, request, abort, send_file, current_app
 from werkzeug.utils import secure_filename
@@ -109,6 +110,7 @@ def render_preview():
          fields:
            - room: file
            - cutouts: file (repeatable)
+           - mask: file (optional)
            - anchor, fit, shadow, opacity, etc. (optional)
     Returns image/png.
     """
@@ -121,13 +123,21 @@ def render_preview():
             abort(400, "room_url (GET) or room file (POST) is required")
         room = _open_rgba_from_url(room_url)
 
-    # 2) Optional inpainting mask (placeholder for now)
-    mask_url = request.args.get("mask_url") if request.method == "GET" else request.form.get("mask")
-    if mask_url or (request.method == "POST" and "mask" in request.files):
-        if request.method == "POST" and "mask" in request.files:
-            mask = _open_rgba_from_upload(request.files["mask"])
+    # 2) Optional inpainting mask
+    mask = None
+    if request.method == "POST" and "mask" in request.files:
+        mask = _open_rgba_from_upload(request.files["mask"])
+    elif request.method == "GET" and "mask_url" in request.args:
+        mask_url = request.args.get("mask_url")
+        if mask_url.startswith("file://"):
+            mask_path = mask_url[7:]  # Remove file:// prefix
+            if os.path.exists(mask_path):
+                mask = Image.open(mask_path).convert("RGBA")
+            else:
+                abort(415, f"Mask file not found: {mask_path}")
         else:
             mask = _open_rgba_from_url(mask_url)
+    if mask:
         room = _inpaint_image(room, mask)
 
     # 2) Load cutouts
