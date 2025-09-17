@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sofa Replacement Results</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .image-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .image-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .image-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .image-card img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .final-result {
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        .final-result h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .final-result img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+        }
+
+        .process-steps {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .process-steps h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .step {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .back-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛋️ Sofa Replacement Demo</h1>
+            <p>K-Kircher Home Sofa → Modern Living Room</p>
+        </div>
+
+        <div class="content">
+            <div class="process-steps">
+                <h2>Process Overview</h2>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h3>Download</h3>
+                        <p>Downloaded the K-Kircher Home sofa image</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h3>Cutout</h3>
+                        <p>Used AI matting to remove background</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h3>Shadow</h3>
+                        <p>Generated realistic shadow for placement</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <h3>Composite</h3>
+                        <p>Placed sofa into the modern living room</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="comparison-grid">
+                <div class="image-card">
+                    <h3>Original K-Kircher Sofa</h3>
+                    <img src="/static/kkircher_sofa_original.jpg" alt="Original K-Kircher Sofa">
+                </div>
+
+                <div class="image-card">
+                    <h3>Room Background (445.png)</h3>
+                    <img src="/static/445.png" alt="Room Background">
+                </div>
+
+                <div class="image-card">
+                    <h3>Room Without Original Sofa</h3>
+                    <img src="/static/room_no_sofa.png" alt="Room Without Sofa">
+                </div>
+
+                <div class="image-card">
+                    <h3>High-Quality Sofa Cutout</h3>
+                    <img src="/static/sofa_cutout_hq.png" alt="High-Quality Sofa Cutout">
+                </div>
+
+                <div class="image-card">
+                    <h3>Realistic Shadow</h3>
+                    <img src="/static/sofa_shadow_realistic.png" alt="Realistic Shadow">
+                </div>
+            </div>
+
+            <div class="final-result">
+                <h2>🎉 Improved Final Result</h2>
+                <img src="/static/improved_sofa_replacement_result.png" alt="Improved Sofa Replacement Result">
+            </div>
+
+            <div style="text-align: center;">
+                <a href="/images" class="back-button">← Back to Image Viewer</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

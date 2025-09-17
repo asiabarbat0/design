@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Furniture Replacement Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+
+        .service-description {
+            background: #e8f4fd;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .service-description h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        .service-description p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-card li {
+            padding: 5px 0;
+            color: #555;
+        }
+
+        .feature-card li:before {
+            content: "✅ ";
+            margin-right: 8px;
+        }
+
+        .comparison-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .comparison-section h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .before-after img {
+            width: 100%;
+            height: 400px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .furniture-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .furniture-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .furniture-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .furniture-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .furniture-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .furniture-card .preview-img {
+            height: 150px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .api-demo {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #28a745;
+        }
+
+        .api-demo h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .final-result {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .final-result h2 {
+            margin-bottom: 20px;
+            font-size: 2.2em;
+        }
+
+        .final-result img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .before-after {
+                grid-template-columns: 1fr;
+            }
+            
+            .furniture-gallery {
+                grid-template-columns: 1fr;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Furniture Replacement Service</h1>
+        
+        <div class="service-description">
+            <h2>🎯 Service Overview</h2>
+            <p>This AI-powered service allows users to replace furniture in room photos by simply describing what they want. For example, "replace my couch with a white couch" will:</p>
+            <p>1. <strong>Segment</strong> the old furniture to create a precise mask</p>
+            <p>2. <strong>Generate</strong> new furniture using AI inpainting (Stable Diffusion/SDXL)</p>
+            <p>3. <strong>Integrate</strong> the new furniture naturally with correct perspective, lighting, and shadows</p>
+            <p>4. <strong>Return</strong> a quick 960px preview for fast feedback</p>
+            <p>5. <strong>Render</strong> a full 1920px final image</p>
+            <p>6. <strong>Cache</strong> results for instant repeated requests</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>🎨 Natural Integration</h3>
+                <ul>
+                    <li>Furniture looks naturally integrated, not pasted on</li>
+                    <li>Correct perspective and lighting</li>
+                    <li>Realistic shadows and depth</li>
+                    <li>Seamless background blending</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>⚡ Fast Performance</h3>
+                <ul>
+                    <li>960px preview for quick feedback</li>
+                    <li>1920px high-quality final render</li>
+                    <li>Caching for instant repeated requests</li>
+                    <li>Optimized processing pipeline</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🛋️ Multiple Types</h3>
+                <ul>
+                    <li>Couches and sofas</li>
+                    <li>Chairs and seating</li>
+                    <li>Tables and desks</li>
+                    <li>Beds and dressers</li>
+                    <li>Custom furniture types</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🎯 Smart Detection</h3>
+                <ul>
+                    <li>AI-powered furniture detection</li>
+                    <li>Precise masking and segmentation</li>
+                    <li>Context-aware inpainting</li>
+                    <li>Fallback manual masking</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="comparison-section">
+            <h2>Before vs After</h2>
+            <div class="before-after">
+                <div>
+                    <h3>Before (Original Room)</h3>
+                    <img src="/static/new_room.jpg" alt="Before - Original Room">
+                </div>
+                <div>
+                    <h3>After (AI Generated White Couch)</h3>
+                    <img src="/static/ai_generated_white_couch.png" alt="After - AI Generated White Couch">
+                </div>
+            </div>
+        </div>
+
+        <div class="furniture-gallery">
+            <div class="furniture-card">
+                <h3>White Couch</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_white_couch.png" alt="White Couch">
+                <img src="/static/preview_960px_ai_generated_white_couch.png" alt="White Couch Preview" class="preview-img">
+                <p>Clean white couch with natural integration</p>
+            </div>
+            
+            <div class="furniture-card">
+                <h3>Black Leather Sofa</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_black_leather_sofa.png" alt="Black Leather Sofa">
+                <img src="/static/preview_960px_ai_generated_black_leather_sofa.png" alt="Black Leather Sofa Preview" class="preview-img">
+                <p>Luxurious black leather sofa</p>
+            </div>
+            
+            <div class="furniture-card">
+                <h3>Brown Wooden Chair</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_brown_wooden_chair.png" alt="Brown Wooden Chair">
+                <img src="/static/preview_960px_ai_generated_brown_wooden_chair.png" alt="Brown Wooden Chair Preview" class="preview-img">
+                <p>Classic brown wooden chair</p>
+            </div>
+            
+            <div class="furniture-card">
+                <h3>Blue Modern Sofa</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_blue_modern_sofa.png" alt="Blue Modern Sofa">
+                <img src="/static/preview_960px_ai_generated_blue_modern_sofa.png" alt="Blue Modern Sofa Preview" class="preview-img">
+                <p>Contemporary blue modern sofa</p>
+            </div>
+            
+            <div class="furniture-card">
+                <h3>Red Velvet Couch</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_red_velvet_couch.png" alt="Red Velvet Couch">
+                <img src="/static/preview_960px_ai_generated_red_velvet_couch.png" alt="Red Velvet Couch Preview" class="preview-img">
+                <p>Elegant red velvet couch</p>
+            </div>
+            
+            <div class="furniture-card">
+                <h3>Green Accent Chair</h3>
+                <div class="status-badge status-success">AI Generated</div>
+                <img src="/static/ai_generated_green_accent_chair.png" alt="Green Accent Chair">
+                <img src="/static/preview_960px_ai_generated_green_accent_chair.png" alt="Green Accent Chair Preview" class="preview-img">
+                <p>Vibrant green accent chair</p>
+            </div>
+        </div>
+
+        <div class="api-demo">
+            <h3>🚀 API Usage Example</h3>
+            <p>Replace furniture using simple API calls:</p>
+            
+            <div class="code-block">
+POST /replace-furniture
+{
+  "roomId": "living_room_1",
+  "furniturePrompt": "white couch",
+  "furnitureType": "couch"
+}
+
+Response:
+{
+  "preview_url": "s3://bucket/renders/room_123_white_couch_960px.png",
+  "full_url": "s3://bucket/renders/room_123_white_couch_1920px.png",
+  "furniture_type": "couch",
+  "furniture_prompt": "white couch",
+  "processing_time": 3.45,
+  "cache_key": "abc123..."
+}
+            </div>
+        </div>
+
+        <div class="final-result">
+            <h2>🎉 AI Furniture Replacement Success</h2>
+            <img src="/static/ai_generated_white_couch.png" alt="AI Furniture Replacement Success">
+            <p style="margin-top: 20px; font-size: 1.1em;">
+                The AI furniture replacement service successfully generates new furniture directly in room photos with natural integration, correct perspective, and realistic lighting. Perfect for interior design and furniture visualization!
+            </p>
+        </div>
+    </div>
+</body>
+</html>

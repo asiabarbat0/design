@@ -1,0 +1,234 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '3.13'
+  POSTGRES_VERSION: '16'
+  NODE_VERSION: '18'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: designstreamdb_test
+          POSTGRES_USER: designstream
+          POSTGRES_PASSWORD: designstream_password
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black
+
+    - name: Set up environment variables
+      run: |
+        cp .env.example .env
+        echo "DATABASE_URL=postgresql+psycopg2://designstream:designstream_password@localhost:5432/designstreamdb_test" >> .env
+        echo "CELERY_BROKER_URL=redis://localhost:6379/0" >> .env
+        echo "S3_ENDPOINT_URL=http://localhost:9000" >> .env
+        echo "S3_BUCKET=designstream-ci" >> .env
+
+    - name: Start MinIO
+      run: |
+        docker run -d --name minio \
+          -p 9000:9000 -p 9001:9001 \
+          -e MINIO_ROOT_USER=minioadmin \
+          -e MINIO_ROOT_PASSWORD=minioadmin123 \
+          minio/minio server /data --console-address ":9001"
+        
+        # Wait for MinIO to be ready
+        timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
+
+    - name: Setup MinIO buckets
+      run: |
+        # Install MinIO client
+        wget https://dl.min.io/client/mc/release/linux-amd64/mc
+        chmod +x mc
+        sudo mv mc /usr/local/bin/
+        
+        # Configure MinIO client
+        mc alias set local http://localhost:9000 minioadmin minioadmin123
+        
+        # Create buckets
+        mc mb local/designstream-ci --ignore-existing
+        mc policy set public local/designstream-ci
+
+    - name: Run database migrations
+      run: |
+        python -c "
+        import os
+        from sqlalchemy import create_engine, text
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        DATABASE_URL = os.getenv('DATABASE_URL')
+        
+        try:
+            engine = create_engine(DATABASE_URL)
+            with engine.connect() as conn:
+                # Enable pgvector extension
+                conn.execute(text('CREATE EXTENSION IF NOT EXISTS vector;'))
+                conn.commit()
+                print('✅ pgvector extension enabled')
+                
+                # Run migrations
+                migration_files = ['migrations/001_initial_schema.sql', 'migrations/002_add_indexes.sql']
+                for migration in migration_files:
+                    if os.path.exists(migration):
+                        with open(migration, 'r') as f:
+                            sql = f.read()
+                            conn.execute(text(sql))
+                            conn.commit()
+                            print(f'✅ Applied migration: {migration}')
+                
+                print('✅ All migrations completed successfully')
+        except Exception as e:
+            print(f'❌ Migration failed: {e}')
+            exit(1)
+        "
+
+    - name: Lint code
+      run: |
+        flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Format check
+      run: |
+        black --check app/
+
+    - name: Run tests
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      run: |
+        docker build -t designstream-ai:latest .
+
+    - name: Test Docker image
+      run: |
+        docker run --rm designstream-ai:latest python -c "print('Docker image works!')"
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        # Add your staging deployment logic here
+        echo "✅ Staging deployment completed"
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [test, build, security]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production environment..."
+        # Add your production deployment logic here
+        echo "✅ Production deployment completed"
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: needs.test.result == 'success' && needs.build.result == 'success'
+      run: |
+        echo "✅ All checks passed! Pipeline successful."
+
+    - name: Notify on failure
+      if: needs.test.result == 'failure' || needs.build.result == 'failure'
+      run: |
+        echo "❌ Pipeline failed. Please check the logs."
+        exit 1
+

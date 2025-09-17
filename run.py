@@ -7,8 +7,8 @@ from app.services.render import bp as render_bp
 from pathlib import Path
 
 base_dir = Path(__file__).resolve().parent.parent  # Project root
-app = create_app()
-app.static_folder = str(base_dir / "app/static")  # Explicitly set
+static_folder = str(base_dir / "static")
+app = create_app(static_folder=static_folder)
 
 @app.get("/widget.js")
 def widget_js():

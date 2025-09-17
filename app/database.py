@@ -65,4 +65,9 @@ class UsageLedger(Base):
     swaps = Column(Float, default=0.0)
     period_start = Column(DateTime)
 
-Base.metadata.create_all(bind=engine)
+# Only create tables if database is available
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"[database] Could not create tables: {e}")
+    print("[database] Database connection will be handled at runtime")

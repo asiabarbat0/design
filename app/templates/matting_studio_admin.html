@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matting Studio Admin - DesignStream AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #fff;
+            border-bottom: 1px solid #d2d2d7;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .confidence-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .confidence-low { background: #ff3b30; color: white; }
+        .confidence-medium { background: #ff9500; color: white; }
+        .confidence-high { background: #34c759; color: white; }
+
+        .main-container {
+            display: flex;
+            height: 100vh;
+            padding-top: 60px;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #fff;
+            border-right: 1px solid #d2d2d7;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .sidebar-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1d1d1f;
+        }
+
+        .tool-group {
+            margin-bottom: 20px;
+        }
+
+        .tool-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #6e6e73;
+            margin-bottom: 6px;
+        }
+
+        .tool-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .tool-btn {
+            padding: 8px 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-btn:hover {
+            background: #f5f5f7;
+        }
+
+        .tool-btn.active {
+            background: #007aff;
+            color: white;
+            border-color: #007aff;
+        }
+
+        .slider-container {
+            margin-bottom: 16px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: #d2d2d7;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #007aff;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #007aff;
+            cursor: pointer;
+            border: none;
+        }
+
+        .slider-value {
+            font-size: 12px;
+            color: #6e6e73;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .overlay-modes {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .overlay-btn {
+            padding: 6px 10px;
+            border: 1px solid #d2d2d7;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .overlay-btn:hover {
+            background: #f5f5f7;
+        }
+
+        .overlay-btn.active {
+            background: #007aff;
+            color: white;
+            border-color: #007aff;
+        }
+
+        .history-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .history-btn {
+            padding: 8px 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .history-btn:hover {
+            background: #f5f5f7;
+        }
+
+        .history-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .queue-item {
+            padding: 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+        }
+
+        .queue-item:hover {
+            background: #f5f5f7;
+            border-color: #007aff;
+        }
+
+        .queue-item.selected {
+            background: #e3f2fd;
+            border-color: #007aff;
+        }
+
+        .queue-preview {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .queue-info {
+            font-size: 12px;
+            color: #6e6e73;
+        }
+
+        .queue-confidence {
+            font-weight: 500;
+            margin-top: 4px;
+        }
+
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #f5f5f7;
+        }
+
+        .editor-toolbar {
+            background: #fff;
+            border-bottom: 1px solid #d2d2d7;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-toolbar h2 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: #f5f5f7;
+        }
+
+        .btn-primary {
+            background: #007aff;
+            color: white;
+            border-color: #007aff;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #34c759;
+            color: white;
+            border-color: #34c759;
+        }
+
+        .btn-success:hover {
+            background: #28a745;
+        }
+
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .canvas-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .image-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            cursor: crosshair;
+            position: relative;
+        }
+
+        .brush-cursor {
+            position: absolute;
+            pointer-events: none;
+            border: 2px solid #007aff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: #6e6e73;
+        }
+
+        .keyboard-shortcuts {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .keyboard-shortcuts.show {
+            opacity: 1;
+        }
+
+        .shortcut {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .shortcut:last-child {
+            margin-bottom: 0;
+        }
+
+        .key {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .status-bar {
+            background: #fff;
+            border-top: 1px solid #d2d2d7;
+            padding: 8px 20px;
+            font-size: 12px;
+            color: #6e6e73;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .brush-preview {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #6e6e73;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-magic"></i> Matting Studio Admin</h1>
+        <div class="header-controls">
+            <div id="confidence-badge" class="confidence-badge hidden"></div>
+            <button class="btn" onclick="toggleShortcuts()">
+                <i class="fas fa-keyboard"></i> Shortcuts
+            </button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h3>Review Queue</h3>
+                <div id="queue-container">
+                    <div class="loading">Loading queue...</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Tools</h3>
+                <div class="tool-group">
+                    <div class="tool-buttons">
+                        <button class="tool-btn active" id="brush-tool" data-tool="brush">
+                            <i class="fas fa-paint-brush"></i> Brush
+                        </button>
+                        <button class="tool-btn" id="eraser-tool" data-tool="eraser">
+                            <i class="fas fa-eraser"></i> Eraser
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tool-group">
+                    <label>Brush Size</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="brush-size" min="5" max="100" value="20">
+                        <div class="slider-value" id="brush-size-value">20px</div>
+                    </div>
+                </div>
+
+                <div class="tool-group">
+                    <label>Brush Hardness</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="brush-hardness" min="0" max="1" step="0.1" value="0.8">
+                        <div class="slider-value" id="brush-hardness-value">80%</div>
+                    </div>
+                </div>
+
+                <div class="tool-group">
+                    <label>Edge Feather</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="edge-feather" min="0" max="20" value="2">
+                        <div class="slider-value" id="edge-feather-value">2px</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Overlay Mode</h3>
+                <div class="overlay-modes">
+                    <button class="overlay-btn active" data-mode="checkerboard">Checkerboard</button>
+                    <button class="overlay-btn" data-mode="alpha">Alpha</button>
+                    <button class="overlay-btn" data-mode="mask">Mask</button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>History</h3>
+                <div class="history-controls">
+                    <button class="history-btn" id="undo-btn" onclick="undo()">
+                        <i class="fas fa-undo"></i> Undo
+                    </button>
+                    <button class="history-btn" id="redo-btn" onclick="redo()">
+                        <i class="fas fa-redo"></i> Redo
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Shadow</h3>
+                <div class="tool-group">
+                    <label>
+                        <input type="checkbox" id="keep-shadow" checked> Keep Shadow
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div class="editor-toolbar">
+                <h2 id="current-image-title">Select an image to edit</h2>
+                <div class="editor-actions">
+                    <button class="btn" onclick="resetMask()">
+                        <i class="fas fa-refresh"></i> Reset
+                    </button>
+                    <button class="btn btn-success" onclick="saveMatting()">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <div class="canvas-wrapper">
+                    <div id="canvas-container" class="hidden">
+                        <canvas id="image-canvas" class="image-canvas"></canvas>
+                        <div id="brush-cursor" class="brush-cursor hidden"></div>
+                    </div>
+                    <div id="no-image" class="loading">
+                        <i class="fas fa-image" style="font-size: 48px; margin-bottom: 16px; color: #d2d2d7;"></i>
+                        <div>Select an image from the queue to start editing</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <div id="status-text">Ready</div>
+                <div id="brush-info">
+                    <div class="brush-preview" id="brush-preview"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="keyboard-shortcuts" id="shortcuts">
+        <div class="shortcut">
+            <span>Brush Tool</span>
+            <span class="key">B</span>
+        </div>
+        <div class="shortcut">
+            <span>Eraser Tool</span>
+            <span class="key">E</span>
+        </div>
+        <div class="shortcut">
+            <span>Decrease Brush Size</span>
+            <span class="key">[</span>
+        </div>
+        <div class="shortcut">
+            <span>Increase Brush Size</span>
+            <span class="key">]</span>
+        </div>
+        <div class="shortcut">
+            <span>Undo</span>
+            <span class="key">Ctrl+Z</span>
+        </div>
+        <div class="shortcut">
+            <span>Redo</span>
+            <span class="key">Ctrl+Y</span>
+        </div>
+        <div class="shortcut">
+            <span>Save</span>
+            <span class="key">Ctrl+S</span>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentMattingId = null;
+        let originalImage = null;
+        let maskData = null;
+        let canvas = null;
+        let ctx = null;
+        let isDrawing = false;
+        let currentTool = 'brush';
+        let brushSize = 20;
+        let brushHardness = 0.8;
+        let edgeFeather = 2;
+        let overlayMode = 'checkerboard';
+        let keepShadow = true;
+        let history = [];
+        let historyIndex = -1;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCanvas();
+            loadReviewQueue();
+            setupEventListeners();
+            updateBrushPreview();
+        });
+
+        function initializeCanvas() {
+            canvas = document.getElementById('image-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Set up canvas event listeners
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+            canvas.addEventListener('mousemove', updateBrushCursor);
+        }
+
+        function setupEventListeners() {
+            // Tool selection
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentTool = this.dataset.tool;
+                    updateBrushCursor();
+                });
+            });
+
+            // Brush settings
+            document.getElementById('brush-size').addEventListener('input', function() {
+                brushSize = parseInt(this.value);
+                document.getElementById('brush-size-value').textContent = brushSize + 'px';
+                updateBrushPreview();
+                updateBrushCursor();
+            });
+
+            document.getElementById('brush-hardness').addEventListener('input', function() {
+                brushHardness = parseFloat(this.value);
+                document.getElementById('brush-hardness-value').textContent = Math.round(brushHardness * 100) + '%';
+                updateBrushPreview();
+            });
+
+            document.getElementById('edge-feather').addEventListener('input', function() {
+                edgeFeather = parseInt(this.value);
+                document.getElementById('edge-feather-value').textContent = edgeFeather + 'px';
+            });
+
+            // Overlay modes
+            document.querySelectorAll('.overlay-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.overlay-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    overlayMode = this.dataset.mode;
+                    updateCanvasDisplay();
+                });
+            });
+
+            // Shadow toggle
+            document.getElementById('keep-shadow').addEventListener('change', function() {
+                keepShadow = this.checked;
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', handleKeyboard);
+        }
+
+        function handleKeyboard(e) {
+            if (e.ctrlKey) {
+                switch(e.key) {
+                    case 'z':
+                        e.preventDefault();
+                        undo();
+                        break;
+                    case 'y':
+                        e.preventDefault();
+                        redo();
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        saveMatting();
+                        break;
+                }
+            } else {
+                switch(e.key) {
+                    case 'b':
+                        e.preventDefault();
+                        selectTool('brush');
+                        break;
+                    case 'e':
+                        e.preventDefault();
+                        selectTool('eraser');
+                        break;
+                    case '[':
+                        e.preventDefault();
+                        decreaseBrushSize();
+                        break;
+                    case ']':
+                        e.preventDefault();
+                        increaseBrushSize();
+                        break;
+                }
+            }
+        }
+
+        function selectTool(tool) {
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tool + '-tool').classList.add('active');
+            currentTool = tool;
+            updateBrushCursor();
+        }
+
+        function decreaseBrushSize() {
+            const slider = document.getElementById('brush-size');
+            const newValue = Math.max(5, parseInt(slider.value) - 5);
+            slider.value = newValue;
+            slider.dispatchEvent(new Event('input'));
+        }
+
+        function increaseBrushSize() {
+            const slider = document.getElementById('brush-size');
+            const newValue = Math.min(100, parseInt(slider.value) + 5);
+            slider.value = newValue;
+            slider.dispatchEvent(new Event('input'));
+        }
+
+        function toggleShortcuts() {
+            document.getElementById('shortcuts').classList.toggle('show');
+            setTimeout(() => {
+                document.getElementById('shortcuts').classList.remove('show');
+            }, 3000);
+        }
+
+        async function loadReviewQueue() {
+            try {
+                const response = await fetch('/matting-studio-admin/queue');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayQueue(data.queue);
+                } else {
+                    console.error('Failed to load queue:', data.error);
+                }
+            } catch (error) {
+                console.error('Error loading queue:', error);
+            }
+        }
+
+        function displayQueue(queue) {
+            const container = document.getElementById('queue-container');
+            
+            if (queue.length === 0) {
+                container.innerHTML = '<div class="loading">No images need review</div>';
+                return;
+            }
+
+            container.innerHTML = queue.map(item => `
+                <div class="queue-item" onclick="loadMatting(${item.id})" data-id="${item.id}">
+                    <img src="${item.original_url}" class="queue-preview" onerror="this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"80\" viewBox=\"0 0 100 80\"><rect width=\"100\" height=\"80\" fill=\"%23f0f0f0\"/><text x=\"50\" y=\"40\" text-anchor=\"middle\" fill=\"%23999\">No Image</text></svg>'">
+                    <div class="queue-info">
+                        <div>ID: ${item.id}</div>
+                        <div class="queue-confidence confidence-${getConfidenceClass(item.confidence_score)}">
+                            Confidence: ${Math.round(item.confidence_score * 100)}%
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence < 0.5) return 'low';
+            if (confidence < 0.7) return 'medium';
+            return 'high';
+        }
+
+        async function loadMatting(mattingId) {
+            try {
+                setStatus('Loading matting data...');
+                
+                const response = await fetch(`/matting-studio-admin/api/matting/${mattingId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentMattingId = mattingId;
+                    originalImage = data.original_image;
+                    maskData = data.matting.mask_data;
+                    
+                    // Update UI
+                    document.getElementById('current-image-title').textContent = `Editing Image #${mattingId}`;
+                    document.getElementById('confidence-badge').textContent = `Confidence: ${Math.round(data.matting.confidence_score * 100)}%`;
+                    document.getElementById('confidence-badge').className = `confidence-badge confidence-${getConfidenceClass(data.matting.confidence_score)}`;
+                    
+                    // Load image and mask
+                    await loadImageAndMask(data.original_image, data.original_shape, maskData);
+                    
+                    // Update queue selection
+                    document.querySelectorAll('.queue-item').forEach(item => {
+                        item.classList.remove('selected');
+                        if (parseInt(item.dataset.id) === mattingId) {
+                            item.classList.add('selected');
+                        }
+                    });
+                    
+                    setStatus('Ready');
+                } else {
+                    console.error('Failed to load matting:', data.error);
+                    setStatus('Error loading matting data');
+                }
+            } catch (error) {
+                console.error('Error loading matting:', error);
+                setStatus('Error loading matting data');
+            }
+        }
+
+        async function loadImageAndMask(imageData, shape, maskData) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    // Set canvas size
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Draw original image
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Load mask if available
+                    if (maskData) {
+                        loadMask(maskData, shape);
+                    } else {
+                        // Create empty mask
+                        maskData = new Array(shape[0] * shape[1]).fill(0);
+                    }
+                    
+                    updateCanvasDisplay();
+                    document.getElementById('canvas-container').classList.remove('hidden');
+                    document.getElementById('no-image').classList.add('hidden');
+                    
+                    resolve();
+                };
+                img.src = `data:image/png;base64,${imageData}`;
+            });
+        }
+
+        function loadMask(maskData, shape) {
+            // Convert mask data to canvas
+            const maskCanvas = document.createElement('canvas');
+            const maskCtx = maskCanvas.getContext('2d');
+            maskCanvas.width = shape[1];
+            maskCanvas.height = shape[0];
+            
+            const imageData = maskCtx.createImageData(shape[1], shape[0]);
+            const data = imageData.data;
+            
+            for (let i = 0; i < maskData.length; i++) {
+                const value = Math.round(maskData[i] * 255);
+                data[i * 4] = value;     // R
+                data[i * 4 + 1] = value; // G
+                data[i * 4 + 2] = value; // B
+                data[i * 4 + 3] = 255;   // A
+            }
+            
+            maskCtx.putImageData(imageData, 0, 0);
+            
+            // Store mask for editing
+            maskData = Array.from(maskData);
+            history = [Array.from(maskData)];
+            historyIndex = 0;
+            
+            updateCanvasDisplay();
+        }
+
+        function updateCanvasDisplay() {
+            if (!originalImage) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw original image
+            const img = new Image();
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0);
+                
+                // Apply mask overlay
+                if (maskData) {
+                    applyMaskOverlay();
+                }
+            };
+            img.src = `data:image/png;base64,${originalImage}`;
+        }
+
+        function applyMaskOverlay() {
+            if (!maskData) return;
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const pixelIndex = i / 4;
+                const maskValue = maskData[pixelIndex] || 0;
+                
+                if (overlayMode === 'checkerboard') {
+                    // Checkerboard pattern
+                    const x = (pixelIndex % canvas.width);
+                    const y = Math.floor(pixelIndex / canvas.width);
+                    const checker = Math.floor(x / 10) + Math.floor(y / 10);
+                    
+                    if (checker % 2 === 0) {
+                        data[i] = data[i] * maskValue + 255 * (1 - maskValue);     // R
+                        data[i + 1] = data[i + 1] * maskValue + 255 * (1 - maskValue); // G
+                        data[i + 2] = data[i + 2] * maskValue + 255 * (1 - maskValue); // B
+                    }
+                } else if (overlayMode === 'alpha') {
+                    // Alpha channel
+                    data[i + 3] = data[i + 3] * maskValue;
+                } else if (overlayMode === 'mask') {
+                    // Mask visualization
+                    data[i] = maskValue * 255;     // R
+                    data[i + 1] = maskValue * 255; // G
+                    data[i + 2] = maskValue * 255; // B
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function startDrawing(e) {
+            if (!maskData) return;
+            
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            drawAt(x, y);
+        }
+
+        function draw(e) {
+            if (!isDrawing || !maskData) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            drawAt(x, y);
+        }
+
+        function stopDrawing() {
+            if (isDrawing) {
+                isDrawing = false;
+                saveState();
+            }
+        }
+
+        function drawAt(x, y) {
+            if (!maskData) return;
+            
+            const action = currentTool === 'brush' ? 'add' : 'remove';
+            
+            // Apply brush stroke to mask
+            for (let dy = -brushSize; dy <= brushSize; dy++) {
+                for (let dx = -brushSize; dx <= brushSize; dx++) {
+                    const px = Math.round(x + dx);
+                    const py = Math.round(y + dy);
+                    
+                    if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance <= brushSize) {
+                            const pixelIndex = py * canvas.width + px;
+                            
+                            // Calculate brush strength
+                            let strength = 1.0;
+                            if (distance > brushSize * brushHardness) {
+                                strength = (1 - distance / brushSize) / (1 - brushHardness);
+                            }
+                            
+                            if (action === 'add') {
+                                maskData[pixelIndex] = Math.min(1.0, maskData[pixelIndex] + strength * 0.1);
+                            } else {
+                                maskData[pixelIndex] = Math.max(0.0, maskData[pixelIndex] - strength * 0.1);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            updateCanvasDisplay();
+        }
+
+        function saveState() {
+            // Remove any states after current index
+            history = history.slice(0, historyIndex + 1);
+            
+            // Add new state
+            history.push(Array.from(maskData));
+            historyIndex++;
+            
+            // Limit history size
+            if (history.length > 50) {
+                history.shift();
+                historyIndex--;
+            }
+            
+            updateHistoryButtons();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                maskData = Array.from(history[historyIndex]);
+                updateCanvasDisplay();
+                updateHistoryButtons();
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                maskData = Array.from(history[historyIndex]);
+                updateCanvasDisplay();
+                updateHistoryButtons();
+            }
+        }
+
+        function updateHistoryButtons() {
+            document.getElementById('undo-btn').disabled = historyIndex <= 0;
+            document.getElementById('redo-btn').disabled = historyIndex >= history.length - 1;
+        }
+
+        function resetMask() {
+            if (confirm('Reset mask to original? This cannot be undone.')) {
+                maskData = new Array(canvas.width * canvas.height).fill(0);
+                history = [Array.from(maskData)];
+                historyIndex = 0;
+                updateCanvasDisplay();
+                updateHistoryButtons();
+            }
+        }
+
+        async function saveMatting() {
+            if (!currentMattingId || !maskData) {
+                alert('No matting data to save');
+                return;
+            }
+            
+            try {
+                setStatus('Saving...');
+                
+                // Convert mask to base64
+                const maskArray = new Float32Array(maskData);
+                const maskBase64 = btoa(String.fromCharCode(...new Uint8Array(maskArray.buffer)));
+                
+                const response = await fetch(`/matting-studio-admin/api/matting/${currentMattingId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        mask_data: maskBase64,
+                        mask_shape: [canvas.height, canvas.width],
+                        brush_settings: {
+                            size: brushSize,
+                            hardness: brushHardness,
+                            edge_feather: edgeFeather
+                        },
+                        keep_shadow: keepShadow,
+                        edited_by: 'admin'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    setStatus('Saved successfully');
+                    alert('Matting saved successfully!');
+                } else {
+                    console.error('Failed to save:', data.error);
+                    setStatus('Error saving matting');
+                    alert('Error saving matting: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error saving matting:', error);
+                setStatus('Error saving matting');
+                alert('Error saving matting: ' + error.message);
+            }
+        }
+
+        function updateBrushCursor(e) {
+            const cursor = document.getElementById('brush-cursor');
+            
+            if (e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                cursor.style.left = (rect.left + x) + 'px';
+                cursor.style.top = (rect.top + y) + 'px';
+                cursor.style.width = (brushSize * 2) + 'px';
+                cursor.style.height = (brushSize * 2) + 'px';
+                cursor.classList.remove('hidden');
+            } else {
+                cursor.classList.add('hidden');
+            }
+        }
+
+        function updateBrushPreview() {
+            // This would generate a brush preview image
+            // For now, just show the size
+            document.getElementById('brush-preview').textContent = brushSize;
+        }
+
+        function setStatus(message) {
+            document.getElementById('status-text').textContent = message;
+        }
+    </script>
+</body>
+</html>

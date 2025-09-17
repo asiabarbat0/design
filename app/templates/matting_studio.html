@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matting Studio - DesignStream AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .work-area {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .queue-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .queue-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .queue-item.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .queue-item img {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .queue-item .confidence {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .confidence.low {
+            color: #f44336;
+            font-weight: 600;
+        }
+
+        .confidence.medium {
+            color: #ff9800;
+            font-weight: 600;
+        }
+
+        .confidence.high {
+            color: #4caf50;
+            font-weight: 600;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: #f5f5f5;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .canvas {
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            background-image: 
+                linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .tool-btn {
+            padding: 8px 16px;
+            border: 2px solid #e1e5e9;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .tool-btn:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .tool-btn.active {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .brush-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brush-size {
+            width: 100px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .stats {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .stats h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading i {
+            font-size: 2rem;
+            color: #667eea;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .image-preview {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .brush-cursor {
+            position: absolute;
+            pointer-events: none;
+            border: 2px solid #667eea;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .sidebar {
+                order: 2;
+            }
+            
+            .work-area {
+                order: 1;
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-cut"></i> Matting Studio</h1>
+            <p>Manual cleanup and review for low-confidence auto matting results</p>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="stats">
+                    <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+                    <div class="stat-item">
+                        <span>Total Images:</span>
+                        <span id="total-images">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Needs Review:</span>
+                        <span id="needs-review" class="confidence low">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Approved:</span>
+                        <span id="approved" class="confidence high">-</span>
+                    </div>
+                </div>
+
+                <h3><i class="fas fa-list"></i> Review Queue</h3>
+                <div id="queue-list">
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i>
+                        <p>Loading queue...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="work-area">
+                <div class="toolbar">
+                    <div class="tool-group">
+                        <button class="tool-btn active" id="brush-add" data-tool="add">
+                            <i class="fas fa-plus"></i> Add
+                        </button>
+                        <button class="tool-btn" id="brush-remove" data-tool="remove">
+                            <i class="fas fa-minus"></i> Remove
+                        </button>
+                    </div>
+
+                    <div class="tool-group">
+                        <label>Brush Size:</label>
+                        <input type="range" id="brush-size" class="brush-size" min="5" max="50" value="20">
+                        <span id="brush-size-value">20</span>
+                    </div>
+
+                    <div class="tool-group">
+                        <button class="tool-btn" id="refinement-smooth" data-refinement="smooth">
+                            <i class="fas fa-blur"></i> Smooth
+                        </button>
+                        <button class="tool-btn" id="refinement-sharpen" data-refinement="sharpen">
+                            <i class="fas fa-cut"></i> Sharpen
+                        </button>
+                        <button class="tool-btn" id="refinement-feather" data-refinement="feather">
+                            <i class="fas fa-feather"></i> Feather
+                        </button>
+                    </div>
+                </div>
+
+                <div class="canvas-container">
+                    <canvas id="canvas" class="canvas"></canvas>
+                    <img id="original-image" class="image-preview" style="display: none;">
+                    <img id="cutout-image" class="image-preview" style="display: none;">
+                    <div id="brush-cursor" class="brush-cursor" style="display: none;"></div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-success" id="approve-btn" disabled>
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-danger" id="reject-btn" disabled>
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                    <button class="btn btn-secondary" id="reset-btn" disabled>
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class MattingStudio {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.originalImage = document.getElementById('original-image');
+                this.cutoutImage = document.getElementById('cutout-image');
+                this.brushCursor = document.getElementById('brush-cursor');
+                
+                this.currentImage = null;
+                this.currentTool = 'add';
+                this.brushSize = 20;
+                this.isDrawing = false;
+                this.brushStrokes = [];
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.loadQueue();
+                this.loadStats();
+                this.setupCanvas();
+            }
+
+            setupEventListeners() {
+                // Tool selection
+                document.querySelectorAll('[data-tool]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.currentTool = e.target.dataset.tool;
+                    });
+                });
+
+                // Brush size
+                const brushSizeSlider = document.getElementById('brush-size');
+                const brushSizeValue = document.getElementById('brush-size-value');
+                brushSizeSlider.addEventListener('input', (e) => {
+                    this.brushSize = parseInt(e.target.value);
+                    brushSizeValue.textContent = this.brushSize;
+                });
+
+                // Refinement tools
+                document.querySelectorAll('[data-refinement]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        this.applyRefinement(e.target.dataset.refinement);
+                    });
+                });
+
+                // Action buttons
+                document.getElementById('approve-btn').addEventListener('click', () => this.approveImage());
+                document.getElementById('reject-btn').addEventListener('click', () => this.rejectImage());
+                document.getElementById('reset-btn').addEventListener('click', () => this.resetImage());
+
+                // Canvas events
+                this.canvas.addEventListener('mousedown', (e) => this.startDrawing(e));
+                this.canvas.addEventListener('mousemove', (e) => this.draw(e));
+                this.canvas.addEventListener('mouseup', () => this.stopDrawing());
+                this.canvas.addEventListener('mouseleave', () => this.stopDrawing());
+
+                // Brush cursor
+                this.canvas.addEventListener('mousemove', (e) => this.updateBrushCursor(e));
+                this.canvas.addEventListener('mouseenter', () => this.brushCursor.style.display = 'block');
+                this.canvas.addEventListener('mouseleave', () => this.brushCursor.style.display = 'none');
+            }
+
+            setupCanvas() {
+                const rect = this.canvas.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            async loadQueue() {
+                try {
+                    const response = await fetch('/matting-studio/queue?limit=20');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.renderQueue(data.images);
+                    } else {
+                        this.showError('Failed to load queue');
+                    }
+                } catch (error) {
+                    this.showError('Error loading queue: ' + error.message);
+                }
+            }
+
+            async loadStats() {
+                try {
+                    const response = await fetch('/matting-studio/stats');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('total-images').textContent = data.stats.total_images;
+                        document.getElementById('needs-review').textContent = data.stats.needs_review;
+                        document.getElementById('approved').textContent = data.stats.approved;
+                    }
+                } catch (error) {
+                    console.error('Error loading stats:', error);
+                }
+            }
+
+            renderQueue(images) {
+                const queueList = document.getElementById('queue-list');
+                queueList.innerHTML = '';
+
+                if (images.length === 0) {
+                    queueList.innerHTML = '<p style="text-align: center; color: #666;">No images need review</p>';
+                    return;
+                }
+
+                images.forEach((image, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'queue-item';
+                    item.dataset.imageId = image.id;
+                    
+                    const confidenceClass = image.confidence < 0.5 ? 'low' : 
+                                          image.confidence < 0.7 ? 'medium' : 'high';
+                    
+                    item.innerHTML = `
+                        <img src="${image.original_url}" alt="Original" onerror="this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"80\" viewBox=\"0 0 100 80\"><rect width=\"100\" height=\"80\" fill=\"%23f0f0f0\"/><text x=\"50\" y=\"40\" text-anchor=\"middle\" fill=\"%23999\">No Image</text></svg>'">
+                        <div class="confidence ${confidenceClass}">
+                            Confidence: ${(image.confidence * 100).toFixed(1)}%
+                        </div>
+                        <div style="font-size: 0.8rem; color: #666;">
+                            ID: ${image.id}
+                        </div>
+                    `;
+                    
+                    item.addEventListener('click', () => this.selectImage(image));
+                    queueList.appendChild(item);
+                });
+            }
+
+            async selectImage(image) {
+                // Update UI
+                document.querySelectorAll('.queue-item').forEach(item => item.classList.remove('active'));
+                document.querySelector(`[data-image-id="${image.id}"]`).classList.add('active');
+                
+                this.currentImage = image;
+                
+                // Enable action buttons
+                document.getElementById('approve-btn').disabled = false;
+                document.getElementById('reject-btn').disabled = false;
+                document.getElementById('reset-btn').disabled = false;
+                
+                // Load images
+                await this.loadImages(image);
+            }
+
+            async loadImages(image) {
+                try {
+                    // Load original image
+                    this.originalImage.src = image.original_url;
+                    this.originalImage.style.display = 'block';
+                    
+                    // Load cutout image if available
+                    if (image.cutout_url) {
+                        this.cutoutImage.src = image.cutout_url;
+                        this.cutoutImage.style.display = 'block';
+                    } else {
+                        this.cutoutImage.style.display = 'none';
+                    }
+                    
+                    // Wait for images to load
+                    await this.waitForImages();
+                    
+                    // Draw on canvas
+                    this.drawToCanvas();
+                    
+                } catch (error) {
+                    this.showError('Error loading images: ' + error.message);
+                }
+            }
+
+            waitForImages() {
+                return new Promise((resolve) => {
+                    let loaded = 0;
+                    const total = 2;
+                    
+                    const checkLoaded = () => {
+                        loaded++;
+                        if (loaded >= total) resolve();
+                    };
+                    
+                    this.originalImage.onload = checkLoaded;
+                    this.cutoutImage.onload = checkLoaded;
+                    
+                    // Timeout after 5 seconds
+                    setTimeout(resolve, 5000);
+                });
+            }
+
+            drawToCanvas() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw original image
+                if (this.originalImage.complete) {
+                    this.ctx.drawImage(this.originalImage, 0, 0, this.canvas.width, this.canvas.height);
+                }
+                
+                // Draw cutout overlay
+                if (this.cutoutImage.complete && this.cutoutImage.style.display !== 'none') {
+                    this.ctx.globalCompositeOperation = 'source-over';
+                    this.ctx.drawImage(this.cutoutImage, 0, 0, this.canvas.width, this.canvas.height);
+                }
+            }
+
+            startDrawing(e) {
+                this.isDrawing = true;
+                this.draw(e);
+            }
+
+            draw(e) {
+                if (!this.isDrawing) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Record brush stroke
+                this.brushStrokes.push({
+                    type: this.currentTool,
+                    x: x,
+                    y: y,
+                    radius: this.brushSize
+                });
+                
+                // Draw on canvas
+                this.ctx.globalCompositeOperation = this.currentTool === 'add' ? 'source-over' : 'destination-out';
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, this.brushSize, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            stopDrawing() {
+                this.isDrawing = false;
+            }
+
+            updateBrushCursor(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                this.brushCursor.style.left = x + 'px';
+                this.brushCursor.style.top = y + 'px';
+                this.brushCursor.style.width = this.brushSize * 2 + 'px';
+                this.brushCursor.style.height = this.brushSize * 2 + 'px';
+            }
+
+            async applyRefinement(mode) {
+                if (!this.currentImage) return;
+                
+                try {
+                    const response = await fetch(`/matting-studio/process/${this.currentImage.id}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            brush_strokes: this.brushStrokes,
+                            refinement_mode: mode
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.showSuccess('Refinement applied successfully');
+                        // Reload the image
+                        await this.loadImages(this.currentImage);
+                    } else {
+                        this.showError('Refinement failed: ' + data.error);
+                    }
+                } catch (error) {
+                    this.showError('Error applying refinement: ' + error.message);
+                }
+            }
+
+            async approveImage() {
+                if (!this.currentImage) return;
+                
+                try {
+                    const response = await fetch(`/matting-studio/approve/${this.currentImage.id}`, {
+                        method: 'POST'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.showSuccess('Image approved successfully');
+                        this.loadQueue();
+                        this.loadStats();
+                        this.resetImage();
+                    } else {
+                        this.showError('Approval failed: ' + data.error);
+                    }
+                } catch (error) {
+                    this.showError('Error approving image: ' + error.message);
+                }
+            }
+
+            async rejectImage() {
+                if (!this.currentImage) return;
+                
+                const reason = prompt('Reason for rejection:', 'Quality not acceptable');
+                if (!reason) return;
+                
+                try {
+                    const response = await fetch(`/matting-studio/reject/${this.currentImage.id}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ reason: reason })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.showSuccess('Image rejected');
+                        this.loadQueue();
+                        this.loadStats();
+                        this.resetImage();
+                    } else {
+                        this.showError('Rejection failed: ' + data.error);
+                    }
+                } catch (error) {
+                    this.showError('Error rejecting image: ' + error.message);
+                }
+            }
+
+            resetImage() {
+                this.brushStrokes = [];
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.originalImage.style.display = 'none';
+                this.cutoutImage.style.display = 'none';
+                
+                document.getElementById('approve-btn').disabled = true;
+                document.getElementById('reject-btn').disabled = true;
+                document.getElementById('reset-btn').disabled = true;
+                
+                document.querySelectorAll('.queue-item').forEach(item => item.classList.remove('active'));
+            }
+
+            showSuccess(message) {
+                this.showAlert(message, 'success');
+            }
+
+            showError(message) {
+                this.showAlert(message, 'error');
+            }
+
+            showAlert(message, type) {
+                const alert = document.createElement('div');
+                alert.className = `alert alert-${type}`;
+                alert.textContent = message;
+                
+                document.querySelector('.work-area').insertBefore(alert, document.querySelector('.toolbar'));
+                
+                setTimeout(() => {
+                    alert.remove();
+                }, 3000);
+            }
+        }
+
+        // Initialize the studio when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new MattingStudio();
+        });
+    </script>
+</body>
+</html>
+

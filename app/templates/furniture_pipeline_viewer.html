@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Furniture Pipeline Results</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+
+        .pipeline-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .step-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .step-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .step-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .step-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .comparison-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .comparison-section h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .before-after img {
+            width: 100%;
+            height: 400px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .final-result {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .final-result h2 {
+            margin-bottom: 20px;
+            font-size: 2.2em;
+        }
+
+        .final-result img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .improvements {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .improvements h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .improvements ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .improvements li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .improvements li:before {
+            content: "✅ ";
+            margin-right: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .before-after {
+                grid-template-columns: 1fr;
+            }
+            
+            .pipeline-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛋️ Furniture Replacement Pipeline</h1>
+        
+        <div class="pipeline-steps">
+            <div class="step-card">
+                <h3>1. Original Room</h3>
+                <div class="status-badge status-info">Input</div>
+                <img src="/static/445.png" alt="Original Room">
+                <p>Original living room with existing sofa</p>
+            </div>
+            
+            <div class="step-card">
+                <h3>2. Sofa Detection</h3>
+                <div class="status-badge status-success">Smart Detection</div>
+                <img src="/static/final_pipeline_test/smart_mask.png" alt="Sofa Mask">
+                <p>AI-detected sofa area for removal</p>
+            </div>
+            
+            <div class="step-card">
+                <h3>3. Clean Room</h3>
+                <div class="status-badge status-success">Inpainted</div>
+                <img src="/static/final_pipeline_test/room_clean_final.png" alt="Clean Room">
+                <p>Room with sofa removed (no distortion)</p>
+            </div>
+            
+            <div class="step-card">
+                <h3>4. New Sofa Cutout</h3>
+                <div class="status-badge status-success">High Quality</div>
+                <img src="/static/final_pipeline_test/cutout_final.png" alt="Sofa Cutout">
+                <p>K-Kircher sofa with transparent background</p>
+            </div>
+            
+            <div class="step-card">
+                <h3>5. Subtle Shadow</h3>
+                <div class="status-badge status-success">Realistic</div>
+                <img src="/static/final_pipeline_test/subtle_shadow.png" alt="Subtle Shadow">
+                <p>Realistic shadow (not big dark circle)</p>
+            </div>
+        </div>
+
+        <div class="comparison-section">
+            <h2>Before vs After</h2>
+            <div class="before-after">
+                <div>
+                    <h3>Before (Original)</h3>
+                    <img src="/static/445.png" alt="Before">
+                </div>
+                <div>
+                    <h3>After (Replaced)</h3>
+                    <img src="/static/final_pipeline_test/render_final.png" alt="After">
+                </div>
+            </div>
+        </div>
+
+        <div class="final-result">
+            <h2>🎉 Final Result</h2>
+            <img src="/static/final_pipeline_test/render_final.png" alt="Final Furniture Replacement">
+            <p style="margin-top: 20px; font-size: 1.1em;">
+                The K-Kircher sofa has successfully replaced the original sofa with proper scaling, positioning, and realistic shadow.
+            </p>
+        </div>
+
+        <div class="improvements">
+            <h3>🔧 Issues Fixed</h3>
+            <ul>
+                <li>Big dark circle shadow → Subtle realistic shadow</li>
+                <li>Background distortion → Clean inpainting with minimal artifacts</li>
+                <li>Cutout not replacing couch → Proper positioning and scaling</li>
+                <li>Smart sofa detection → AI-powered furniture detection</li>
+                <li>High-quality cutout → Professional background removal</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

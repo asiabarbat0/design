@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: designstream_postgres
+    environment:
+      POSTGRES_DB: designstreamdb
+      POSTGRES_USER: designstream
+      POSTGRES_PASSWORD: designstream_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U designstream -d designstreamdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - designstream_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: designstream_minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_DEFAULT_BUCKETS: designstream-uploads,designstream-renders,designstream-ci
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - designstream_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: designstream_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - designstream_network
+
+  # Development database with pgvector extension
+  postgres-dev:
+    image: pgvector/pgvector:pg16
+    container_name: designstream_postgres_dev
+    environment:
+      POSTGRES_DB: designstreamdb_dev
+      POSTGRES_USER: designstream
+      POSTGRES_PASSWORD: designstream_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U designstream -d designstreamdb_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - designstream_network
+
+volumes:
+  postgres_data:
+  postgres_dev_data:
+  minio_data:
+  redis_data:
+
+networks:
+  designstream_network:
+    driver: bridge
+
